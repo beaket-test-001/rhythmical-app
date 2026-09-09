@@ -280,16 +280,20 @@ describe('createJudger — 기대 탭별 판정 기록 (Tech Spec §2 TapJudgmen
     expect(early.judgments()[0]!.deltaMs).toBeCloseTo(-80, 6);
   });
 
-  it('tapTime은 실제 입력 시각, deltaMs는 지연 보정 후 오차다 (사양 §5)', () => {
-    // 보정 +100ms 기기에서 100ms 늦게 친 탭 = 실제로는 정확히 맞춘 것
+  it('세 시각이 같은 축에 있다 — deltaMs = (tapTime − expectedTime) × 1000', () => {
+    // 사양 §2가 deltaMs를 "tap − expected (보정 후)"라는 등식으로 정의하므로
+    // tapTime도 보정 후 축이어야 한다. 보정 전 시각을 넣으면 perfect인데
+    // tapTime − expectedTime은 창 밖인 자기모순 레코드가 나온다.
     const j = createJudger(expected, 100);
-    const rawTime = expected[0]! + ms(100);
-    j.tap(rawTime);
+    j.tap(expected[0]! + ms(100)); // 보정 +100ms 기기에서 100ms 늦게 친 탭
 
     const record = j.judgments()[0]!;
-    expect(record.tapTime).toBe(rawTime); // 보정 전 = 사용자가 실제로 친 시각
-    expect(record.deltaMs).toBeCloseTo(0, 6); // 보정 후 = 판정에 쓰인 오차
     expect(record.verdict).toBe('perfect');
+    expect(record.deltaMs).toBeCloseTo(0, 6);
+    expect((record.tapTime! - record.expectedTime) * 1000).toBeCloseTo(
+      record.deltaMs!,
+      6,
+    );
   });
 
   it('집계는 기록에서 파생된다 — 두 값이 어긋날 수 없다', () => {
@@ -308,6 +312,8 @@ describe('createJudger — 기대 탭별 판정 기록 (Tech Spec §2 TapJudgmen
     };
     expect(j.result('quarter', 80).counts).toEqual(counted);
     expect(counted).toEqual({ perfect: 12, good: 2, miss: 2 });
+    // 세 판정은 배타적이어야 한다. 이 합이 깨지면 정확도 분모가 조용히 틀어진다
+    expect(counted.perfect + counted.good + counted.miss).toBe(expected.length);
   });
 
   it('돌려준 기록을 고쳐도 판정기 내부는 바뀌지 않는다', () => {
@@ -319,6 +325,7 @@ describe('createJudger — 기대 탭별 판정 기록 (Tech Spec §2 TapJudgmen
     stolen[1]!.tapTime = 999;
 
     expect(j.judgments()[0]!.verdict).toBe('perfect');
+    expect(j.judgments()[1]!.tapTime).toBeNull();
     expect(j.result('quarter', 80).counts.perfect).toBe(1);
   });
 });

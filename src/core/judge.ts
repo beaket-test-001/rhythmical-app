@@ -98,9 +98,17 @@ export interface Judger {
   collectMisses(now: number): number[];
   /**
    * 기대 탭별 판정 기록 (Tech Spec §2). 집계(result)는 이 값에서 파생된다.
+   * 시각은 모두 보정 후 축이라 deltaMs = (tapTime − expectedTime) × 1000이다.
    *
-   * v0.1 화면은 분포만 표시하지만, 판정기가 실제로 들고 있는 모델이 이것이다.
-   * 사양 §6의 보정 도우미(P2, "8회 탭 → 평균 오차 제안")가 deltaMs를 쓴다.
+   * 주의: collectMisses가 miss를 확정해도 기록은 바뀌지 않는다. 초기 verdict가
+   * 이미 miss라 종료 후 집계는 맞지만, "확정된 miss"와 "아직 마감 전"은
+   * 구분되지 않는다. 세션 진행 중에 이 값을 화면에 쓰려면 그때 구분을 넣어라.
+   *
+   * TODO: v0.1 화면에는 소비처가 없다(분포만 표시). 사양 §6의 보정 도우미
+   *       (P2, "8회 탭 → 평균 오차 제안")가 deltaMs를 쓸 때 첫 소비자가 된다.
+   *       그때까지 이 접근자의 유일한 소비자는 테스트다. 다만 지우면 deltaMs가
+   *       아무도 읽지 않는 필드가 되어, 이 변경이 없애려던 미사용 상태가
+   *       필드 단위로 되살아난다.
    */
   judgments(): TapJudgment[];
   /**
@@ -198,17 +206,20 @@ export function createJudger(expected: number[], offsetMs: number): Judger {
       }
 
       // 5. 해당 기대 탭의 허용 오차 안이면 매칭 확정.
-      //    tapTime은 사용자가 실제로 친 시각(보정 전), deltaMs는 판정에 쓰인
-      //    보정 후 오차다 — 사양 §5의 "판정 시각 = 탭 시각 − 보정 오프셋".
-      //    따라서 offset이 0이 아니면 deltaMs ≠ tapTime − expectedTime이다.
+      //    기록의 세 시각은 모두 보정 후 축이다. 사양 §2가 deltaMs를
+      //    "tap - expected (보정 후)"라는 등식으로 정의하므로, tapTime에
+      //    보정 전 시각을 넣으면 그 등식이 레코드 안에서 깨진다. 그러면
+      //    perfect인데 tapTime - expectedTime은 창 밖인 기록이 나온다.
+      //    사용자가 실제로 친 시각이 필요하면 tapTime + offsetMs / 1000이다.
       const signedDeltaMs = (adjusted - expected[index]!) * 1000;
       const distanceMs = Math.abs(signedDeltaMs);
       const tapWindow = windows[index]!;
 
       const settle = (verdict: MatchedVerdict): MatchedVerdict => {
         judgments[index] = {
-          expectedTime: expected[index]!,
-          tapTime: rawTime,
+          // expectedTime은 이미 기록에 있다. 다시 파생시키면 출처가 둘이 된다
+          ...judgments[index]!,
+          tapTime: adjusted,
           deltaMs: signedDeltaMs,
           verdict,
         };
