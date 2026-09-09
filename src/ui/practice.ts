@@ -98,6 +98,31 @@ export function startSession({
   };
 }
 
+/**
+ * event.timeStamp를 performance.now()와 같은 시계로 볼 수 있는 최대 차이(ms).
+ * 이벤트 디스패치가 아무리 밀려도 이 안이고, 축이 다르면(epoch 기준) 차이가
+ * 1e12 단위라 어떤 값으로 잡아도 구분된다.
+ */
+const SAME_CLOCK_TOLERANCE_MS = 1000;
+
+/**
+ * 입력 이벤트의 시각을 performance.now() 축의 값으로 돌려준다.
+ *
+ * event.timeStamp는 performance.now()와 같은 기준점을 쓰고 하드웨어에 더
+ * 가까워서, 핸들러 진입 지연이 판정에 섞이지 않는다. 그래서 우선한다.
+ *
+ * 다만 일부 WebKit 버전은 이 값을 epoch 기준으로 준다. 그대로 쓰면 세션
+ * anchor와 축이 어긋나 모든 탭이 판정 창 밖으로 나가고, 예외도 없이 정확도만
+ * 0%가 된다 — 화면은 멀쩡해 보여서 알아채기 어렵다. 두 시계가 크게 벌어지면
+ * timeStamp를 신뢰하지 않는다.
+ */
+export function inputTime(eventTimeStamp: number, now: number): number {
+  const sameClock =
+    eventTimeStamp > 0 &&
+    Math.abs(eventTimeStamp - now) <= SAME_CLOCK_TOLERANCE_MS;
+  return sameClock ? eventTimeStamp : now;
+}
+
 /** 판정 라벨. 색만으로 구분하지 않도록 텍스트를 병기한다(색약 대응). */
 const FLASH_LABEL = {
   perfect: 'PERFECT',
@@ -362,13 +387,7 @@ export function mountPractice(
     if (outcome === 'perfect' || outcome === 'good') showFlash(outcome);
   }
 
-  /**
-   * 입력 시각. event.timeStamp는 performance.now()와 같은 기준점을 쓰고
-   * 하드웨어에 더 가까운 값이라 우선한다. 값이 없는 합성 이벤트만 대체한다.
-   */
-  function stampOf(e: Event) {
-    return e.timeStamp > 0 ? e.timeStamp : performance.now();
-  }
+  const stampOf = (e: Event) => inputTime(e.timeStamp, performance.now());
 
   function exit() {
     // teardown이 stage를 바꾸므로 먼저 읽는다.
