@@ -113,6 +113,11 @@ export interface PracticeScreenOptions {
   /** 목록으로 돌아간다. 중지(결과 미저장)를 포함한다. */
   onExit(): void;
   onFinish(result: SessionResult): void;
+  /**
+   * 붙자마자 카운트인을 시작한다. 사양 §4의 finished → countIn(다시하기)용.
+   * 호출이 사용자 제스처의 콜스택 안에 있어야 AudioContext를 만들 수 있다.
+   */
+  autoStart?: boolean;
 }
 
 /**
@@ -151,7 +156,7 @@ export function mountPractice(
     <section class="screen practice">
       <header class="topbar">
         <button class="topbar__back" type="button" aria-label="중지하고 목록으로">←</button>
-        <h1 class="topbar__title"></h1>
+        <h1 class="topbar__title" tabindex="-1"></h1>
         <label class="bpm">
           <span class="bpm__label">BPM</span>
           <input class="bpm__slider" type="range" min="${pattern.bpmMin}"
@@ -361,6 +366,8 @@ export function mountPractice(
   });
   document.addEventListener('keydown', onKeyDown);
   document.addEventListener('visibilitychange', onVisibilityChange);
+
+  if (opts.autoStart) void start();
 
   return () => {
     teardown();

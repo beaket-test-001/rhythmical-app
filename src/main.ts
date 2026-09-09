@@ -16,8 +16,16 @@ const app = document.querySelector<HTMLDivElement>('#app')!;
 let unmount: (() => void) | null = null;
 
 function show(mount: (root: HTMLElement) => () => void) {
-  unmount?.();
+  // 먼저 비우고 호출한다. mount가 던져도 이미 쓴 정리 함수가 남아 다음
+  // 전환에서 두 번 불리는 일이 없다.
+  const previous = unmount;
+  unmount = null;
+  previous?.();
   unmount = mount(app);
+
+  // 화면이 통째로 바뀌면 포커스가 body로 떨어져 스크린리더가 새 화면을
+  // 읽지 않는다. 각 화면의 제목으로 옮겨 준다.
+  app.querySelector<HTMLElement>('h1')?.focus();
 }
 
 function showList() {
@@ -30,11 +38,12 @@ function showList() {
   );
 }
 
-function showPractice(pattern: Pattern, bpm: number) {
+function showPractice(pattern: Pattern, bpm: number, autoStart = false) {
   show((root) =>
     mountPractice(root, {
       pattern,
       bpm,
+      autoStart,
       // 지연 보정은 세션 시작 시점의 값을 쓴다. 진행 중 바뀌면 판정 기준이 흔들린다
       offsetMs: loadSettings().offsetMs,
       onExit: showList,
@@ -51,7 +60,6 @@ function showResult(pattern: Pattern, result: SessionResult) {
   show((root) =>
     mountResult(root, {
       result,
-      pattern,
       isNewBest,
       onRetry: () => showPractice(pattern, result.bpm),
       onList: showList,

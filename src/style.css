@@ -203,6 +203,8 @@ body {
   .beats--pulse {
     animation: none;
   }
+}
+
 /* 패턴 목록 ------------------------------------------------------------- */
 .list {
   overflow-y: auto;
@@ -340,4 +342,21 @@ body {
 .btn--primary {
   border-color: var(--accent);
   background: var(--accent);
+}
+
+/* 화면에는 안 보이지만 스크린리더는 읽는 텍스트 */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* 포커스 이동용 제목에는 기본 아웃라인을 띄우지 않는다 */
+h1:focus {
+  outline: none;
 }

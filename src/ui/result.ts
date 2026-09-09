@@ -1,9 +1,8 @@
 // 결과 화면 — Tech Spec §6, 디자인 문서.
-import type { Pattern, SessionResult } from '../types';
+import type { SessionResult } from '../types';
 
 export interface ResultScreenOptions {
   result: SessionResult;
-  pattern: Pattern;
   /** 최고 기록을 실제로 갱신하고 저장까지 성공했는지. 배지 표시 조건. */
   isNewBest: boolean;
   onRetry(): void;
@@ -13,14 +12,15 @@ export interface ResultScreenOptions {
 /** 결과 화면을 붙이고 정리 함수를 돌려준다. */
 export function mountResult(
   root: HTMLElement,
-  { result, pattern, isNewBest, onRetry, onList }: ResultScreenOptions,
+  { result, isNewBest, onRetry, onList }: ResultScreenOptions,
 ): () => void {
   const { perfect, good, miss } = result.counts;
 
   root.innerHTML = `
     <section class="screen result">
-      <p class="result__pattern">${pattern.name} · ${result.bpm} BPM</p>
-      <p class="result__accuracy">${result.accuracy}%</p>
+      <h1 class="result__accuracy" tabindex="-1">
+        <span class="visually-hidden">정확도 </span>${result.accuracy}%
+      </h1>
       ${isNewBest ? '<p class="result__badge">🏆 최고 기록 갱신!</p>' : ''}
       <dl class="result__counts">
         <div><dt>Perfect</dt><dd>${perfect}</dd></div>
