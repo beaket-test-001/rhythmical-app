@@ -1,12 +1,16 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   loadRecords,
-  bestAccuracy,
   saveRecord,
   loadSettings,
   saveSettings,
 } from '../src/storage';
 import { RECORDS_KEY, SETTINGS_KEY, OFFSET_MAX_MS, OFFSET_MIN_MS } from '../src/constants';
+import type { PatternId } from '../src/types';
+
+/** 목록 화면과 같은 경로로 최고 기록을 읽는다. */
+const bestAccuracy = (patternId: PatternId) =>
+  loadRecords().find((r) => r.patternId === patternId)?.bestAccuracy ?? null;
 
 /** 최소한의 인메모리 Storage. 저장 실패 시나리오를 흉내내기 위해 직접 만든다. */
 function fakeStorage(failOnWrite = false) {
@@ -105,6 +109,43 @@ describe('저장소 오염 방어 — localStorage는 사용자가 편집할 수
     vi.stubGlobal('localStorage', fakeStorage(true));
     expect(() => saveRecord('quarter', 90)).not.toThrow();
     expect(saveRecord('quarter', 90)).toBe(false); // 갱신되지 않았음을 알린다
+  });
+});
+
+describe('저장 형식 보존 — 1.0.0부터 기록을 깨는 변경은 major다', () => {
+  it('이 빌드가 모르는 패턴의 기록을 지우지 않는다', () => {
+    // 패턴 id 이름을 바꾸는 minor 변경만으로 최고 기록이 사라지면,
+    // "형식을 깨는 변경은 major" 약속을 코드가 지키지 못한다.
+    seed(
+      RECORDS_KEY,
+      JSON.stringify([
+        { patternId: 'shuffle', bestAccuracy: 88, updatedAt: '2026-09-09T00:00:00.000Z' },
+      ]),
+    );
+    saveRecord('quarter', 90);
+
+    const stored = JSON.parse(localStorage.getItem(RECORDS_KEY)!);
+    expect(stored).toContainEqual(
+      expect.objectContaining({ patternId: 'shuffle', bestAccuracy: 88 }),
+    );
+    expect(bestAccuracy('quarter')).toBe(90); // 새 기록도 정상 저장
+  });
+
+  it('읽지 못하는 항목도 남긴다', () => {
+    seed(RECORDS_KEY, JSON.stringify([{ 알수없는: '형식' }, null]));
+    saveRecord('quarter', 90);
+
+    const stored = JSON.parse(localStorage.getItem(RECORDS_KEY)!);
+    expect(stored).toHaveLength(3); // 기존 2개 + 새 기록
+    expect(loadRecords()).toHaveLength(1); // 읽을 때는 걸러진다
+  });
+
+  it('같은 패턴의 기록은 덮어쓴다 — 중복이 쌓이지 않는다', () => {
+    saveRecord('quarter', 70);
+    saveRecord('quarter', 90);
+    const stored = JSON.parse(localStorage.getItem(RECORDS_KEY)!);
+    expect(stored).toHaveLength(1);
+    expect(bestAccuracy('quarter')).toBe(90);
   });
 });
 

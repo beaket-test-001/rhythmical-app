@@ -12,7 +12,7 @@ export type PatternId =
 export interface Pattern {
   id: PatternId;
   name: string; // 표시명(한국어)
-  // TODO: MVP는 [4, 4] 고정. 다른 박자표는 v0.2+에서 지원(로드맵 DB 등록 대상)
+  // TODO: [4, 4] 고정. 다른 박자표 지원은 로드맵 DB 등록 대상이다
   timeSignature: [number, number];
   bpmDefault: number;
   bpmMin: number;
