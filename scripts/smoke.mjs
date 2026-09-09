@@ -57,12 +57,19 @@ const chrome = spawn(
   { stdio: 'ignore' },
 );
 
-/** 비정상 종료로 Chrome이나 임시 프로필이 남지 않게 한다. */
-const cleanup = () => {
-  try {
+/**
+ * Chrome을 끄고 임시 프로필을 지운다.
+ *
+ * 프로세스가 완전히 죽기 전에 지우면 ENOTEMPTY로 실패한다. 삭제가 try로
+ * 감싸여 있어 조용히 넘어가는 대신 프로필이 계속 쌓인다 — 실제로 23개가
+ * 남아 있었다. 종료를 기다린 뒤 지운다.
+ */
+const cleanup = async () => {
+  if (chrome.exitCode === null) {
+    const exited = new Promise((resolve) => chrome.once('exit', resolve));
     chrome.kill();
-  } catch {
-    // 이미 죽었으면 무시
+    // 안 죽는 경우에도 스크립트가 매달리지 않게 상한을 둔다
+    await Promise.race([exited, wait(3000)]);
   }
   try {
     rmSync(profile, { recursive: true, force: true });
@@ -72,8 +79,7 @@ const cleanup = () => {
 };
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.on(signal, () => {
-    cleanup();
-    process.exit(signal === 'SIGINT' ? 130 : 143);
+    void cleanup().then(() => process.exit(signal === 'SIGINT' ? 130 : 143));
   });
 }
 
@@ -452,6 +458,6 @@ try {
     for (const f of failed) console.log(`  - ${f.label}`);
   }
   ws?.close();
-  cleanup();
+  await cleanup();
   process.exit(failed.length ? 1 : 0);
 }
