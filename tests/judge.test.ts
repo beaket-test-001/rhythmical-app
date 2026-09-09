@@ -243,3 +243,82 @@ describe('createJudger — 판정 확정 시각', () => {
     expect(createJudger(exp, 0).settledAt).toBeLessThan(barEnd);
   });
 });
+
+describe('createJudger — 기대 탭별 판정 기록 (Tech Spec §2 TapJudgment)', () => {
+  const expected = expectedTapTimes(quarter, 80, 0);
+
+  it('기대 탭 수만큼 기록을 만들고, 입력 전에는 전부 미입력 miss다', () => {
+    const records = createJudger(expected, 0).judgments();
+    expect(records).toHaveLength(expected.length);
+    expect(records[0]).toEqual({
+      expectedTime: expected[0],
+      tapTime: null,
+      deltaMs: null,
+      verdict: 'miss',
+    });
+  });
+
+  it('매칭된 탭의 시각과 오차를 남긴다', () => {
+    const j = createJudger(expected, 0);
+    j.tap(expected[0]! + ms(30));
+
+    expect(j.judgments()[0]).toEqual({
+      expectedTime: expected[0],
+      tapTime: expected[0]! + ms(30),
+      deltaMs: expect.closeTo(30, 6),
+      verdict: 'perfect',
+    });
+  });
+
+  it('늦은 탭은 양수, 이른 탭은 음수 오차다', () => {
+    const late = createJudger(expected, 0);
+    late.tap(expected[0]! + ms(80));
+    expect(late.judgments()[0]!.deltaMs).toBeCloseTo(80, 6);
+
+    const early = createJudger(expected, 0);
+    early.tap(expected[0]! - ms(80));
+    expect(early.judgments()[0]!.deltaMs).toBeCloseTo(-80, 6);
+  });
+
+  it('tapTime은 실제 입력 시각, deltaMs는 지연 보정 후 오차다 (사양 §5)', () => {
+    // 보정 +100ms 기기에서 100ms 늦게 친 탭 = 실제로는 정확히 맞춘 것
+    const j = createJudger(expected, 100);
+    const rawTime = expected[0]! + ms(100);
+    j.tap(rawTime);
+
+    const record = j.judgments()[0]!;
+    expect(record.tapTime).toBe(rawTime); // 보정 전 = 사용자가 실제로 친 시각
+    expect(record.deltaMs).toBeCloseTo(0, 6); // 보정 후 = 판정에 쓰인 오차
+    expect(record.verdict).toBe('perfect');
+  });
+
+  it('집계는 기록에서 파생된다 — 두 값이 어긋날 수 없다', () => {
+    const j = createJudger(expected, 0);
+    expected.forEach((t, i) => {
+      if (i < 12) j.tap(t); // perfect
+      else if (i < 14) j.tap(t + ms(100)); // good
+      // 나머지 2개는 입력하지 않는다 → miss
+    });
+
+    const records = j.judgments();
+    const counted = {
+      perfect: records.filter((r) => r.verdict === 'perfect').length,
+      good: records.filter((r) => r.verdict === 'good').length,
+      miss: records.filter((r) => r.verdict === 'miss').length,
+    };
+    expect(j.result('quarter', 80).counts).toEqual(counted);
+    expect(counted).toEqual({ perfect: 12, good: 2, miss: 2 });
+  });
+
+  it('돌려준 기록을 고쳐도 판정기 내부는 바뀌지 않는다', () => {
+    const j = createJudger(expected, 0);
+    j.tap(expected[0]!);
+
+    const stolen = j.judgments();
+    stolen[0]!.verdict = 'miss';
+    stolen[1]!.tapTime = 999;
+
+    expect(j.judgments()[0]!.verdict).toBe('perfect');
+    expect(j.result('quarter', 80).counts.perfect).toBe(1);
+  });
+});
