@@ -6,7 +6,7 @@
 
 ```bash
 npm install
-npm run dev      # 개발 서버 (http://localhost:5173)
+npm run dev      # 개발 서버 (http://localhost:5173/rhythmical-app/)
 npm test         # style.css 구조 검사 + 단위 테스트 (Vitest)
 npm run build    # 타입 체크 + 프로덕션 빌드 → dist/
 ```
@@ -30,7 +30,7 @@ QA 문서의 체크리스트 중 **데스크톱 Chrome에서 자동화 가능한
 
 ## 기술 스택
 
-Vite + TypeScript (프레임워크 없음) · Web Audio API · localStorage · Vercel 정적 호스팅
+Vite + TypeScript (프레임워크 없음) · Web Audio API · localStorage · GitHub Pages 정적 호스팅
 
 ## 배포
 

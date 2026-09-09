@@ -57,29 +57,40 @@ const chrome = spawn(
   { stdio: 'ignore' },
 );
 
-/** 비정상 종료로 Chrome이 남지 않게 한다. */
-const killChrome = () => {
+/** 비정상 종료로 Chrome이나 임시 프로필이 남지 않게 한다. */
+const cleanup = () => {
   try {
     chrome.kill();
   } catch {
     // 이미 죽었으면 무시
   }
+  try {
+    rmSync(profile, { recursive: true, force: true });
+  } catch {
+    // 지우지 못해도 진행
+  }
 };
-process.on('SIGINT', () => {
-  killChrome();
-  process.exit(130);
-});
-process.on('SIGTERM', () => {
-  killChrome();
-  process.exit(143);
-});
+for (const signal of ['SIGINT', 'SIGTERM']) {
+  process.on(signal, () => {
+    cleanup();
+    process.exit(signal === 'SIGINT' ? 130 : 143);
+  });
+}
 
-/** Chrome이 고른 디버깅 포트. 프로필 디렉터리에 적힌다. */
+/**
+ * Chrome이 고른 디버깅 포트. 프로필 디렉터리의 DevToolsActivePort에 적힌다.
+ *
+ * 파일은 1행 포트 / 2행 웹소켓 경로다. 쓰기가 원자적이지 않아 포트를 쓰다 만
+ * 상태("634")를 읽을 수 있으므로, 2행까지 도착한 뒤에만 받아들인다.
+ */
 const readDebugPort = async () => {
   for (let i = 0; i < 80; i++) {
     try {
-      const [port] = readFileSync(join(profile, 'DevToolsActivePort'), 'utf8').split('\n');
-      if (port) return Number(port);
+      const [port, wsPath] = readFileSync(
+        join(profile, 'DevToolsActivePort'),
+        'utf8',
+      ).split('\n');
+      if (port && wsPath?.startsWith('/devtools/')) return Number(port);
     } catch {
       // 아직 안 만들어졌다
     }
@@ -441,9 +452,6 @@ try {
     for (const f of failed) console.log(`  - ${f.label}`);
   }
   ws?.close();
-  killChrome();
-  try {
-    rmSync(profile, { recursive: true, force: true });
-  } catch {}
+  cleanup();
   process.exit(failed.length ? 1 : 0);
 }
