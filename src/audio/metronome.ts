@@ -11,6 +11,7 @@ import {
   PLAY_BARS,
   SCHEDULE_AHEAD_S,
 } from '../constants';
+import type { Pattern } from '../types';
 
 /** 예약된 박 하나. time은 AudioContext 축(초). */
 export interface Beat {
@@ -38,11 +39,19 @@ export const isAccentBeat = (
 ): boolean => accents.includes(beatIndex % beatsPerBar);
 
 export interface BeatScheduler {
+  /**
+   * 마지막 마디가 끝나는 시각. 마지막 '클릭'(index total-1)보다 1박 뒤다.
+   *
+   * 패턴에 따라 마지막 기대 탭이 마지막 클릭보다 뒤에 온다. eighth-mix는
+   * 마지막 탭이 마디 3의 3.5박이라 마지막 클릭보다 반 박 늦다. 이 시각을
+   * 기준으로 삼아야 결과 화면이 일찍 전환되지 않는다 (Tech Spec §3 종료 집계).
+   */
+  readonly endTime: number;
   /** now 기준 선행 예약 윈도우 안의 아직 안 나온 박들. 같은 박은 한 번만 나온다. */
   pull(now: number): Beat[];
-  /** now 시점에 이미 울린 가장 최근 박. 시작 전이면 null. 비트 인디케이터용. */
+  /** now 시점에 울리고 있는 박. 시작 전이거나 끝난 뒤면 null. 비트 인디케이터용. */
   beatAt(now: number): Beat | null;
-  /** 총 박을 모두 내보냈는지. */
+  /** 총 박을 모두 내보냈는지(예약 기준). 재생 완료와는 다르다. */
   isDone(): boolean;
 }
 
@@ -68,6 +77,8 @@ export function createBeatScheduler(
   let nextIndex = 0;
 
   return {
+    endTime: startTime + total * secondsPerBeat,
+
     pull(now) {
       const until = now + SCHEDULE_AHEAD_S;
       const beats: Beat[] = [];
@@ -82,9 +93,8 @@ export function createBeatScheduler(
 
     beatAt(now) {
       const elapsed = now - startTime;
-      if (elapsed < 0) return null;
-      const index = Math.min(Math.floor(elapsed / secondsPerBeat), total - 1);
-      return beatAtIndex(index);
+      if (elapsed < 0 || elapsed >= total * secondsPerBeat) return null;
+      return beatAtIndex(Math.floor(elapsed / secondsPerBeat));
     },
 
     isDone: () => nextIndex >= total,
@@ -102,8 +112,9 @@ const CLICK_SECONDS = 0.05;
  * gain을 순간적으로 끊지 않고 지수적으로 감쇠시키는 이유는, 급격한 진폭 변화가
  * 클릭 노이즈(팝)를 만들기 때문이다.
  */
-export function scheduleClick(
+function scheduleClick(
   ctx: AudioContext,
+  destination: AudioNode,
   time: number,
   isAccent: boolean,
 ): void {
@@ -114,7 +125,7 @@ export function scheduleClick(
   gain.gain.setValueAtTime(1, time);
   gain.gain.exponentialRampToValueAtTime(0.001, time + CLICK_SECONDS);
 
-  osc.connect(gain).connect(ctx.destination);
+  osc.connect(gain).connect(destination);
   osc.start(time);
   osc.stop(time + CLICK_SECONDS);
 }
@@ -122,42 +133,67 @@ export function scheduleClick(
 export interface Metronome {
   /** 카운트인 첫 박의 AudioContext 시각. 판정의 기준점이 된다. */
   readonly startTime: number;
-  /** now 시점에 울린 가장 최근 박. 비트 인디케이터용. */
+  /** 마지막 마디가 끝나는 시각. 결과 화면 전환 시점의 기준이다. */
+  readonly endTime: number;
+  /** now 시점에 울리고 있는 박. 비트 인디케이터용. */
   beatAt(now: number): Beat | null;
+  /** 즉시 중지. 이미 예약된 클릭도 함께 끊는다. */
   stop(): void;
 }
 
-export interface MetronomeOptions extends Omit<BeatSchedulerOptions, 'startTime'> {
+export interface MetronomeOptions {
   ctx: AudioContext;
-  /** 마지막 박까지 예약을 마치면 호출된다(재생 완료가 아니라 예약 완료). */
-  onScheduled?: () => void;
+  pattern: Pattern;
+  bpm: number;
 }
 
 /**
  * 메트로놈을 시작한다. 호출 전에 사용자 제스처로 ctx.resume()이 끝나 있어야 한다
  * (iOS 자동재생 정책).
  *
- * 첫 박을 살짝 뒤에 잡는 이유는, 지금 당장으로 잡으면 첫 클릭이 예약 윈도우를
- * 이미 지나쳐 누락되기 때문이다.
+ * 첫 박은 지금이 아니라 약간 뒤에 잡는다. 지금 당장으로 잡으면 예약과 재생
+ * 사이에 여유가 없어 첫 클릭이 누락된다.
  */
-export function startMetronome(opts: MetronomeOptions): Metronome {
-  const { ctx, onScheduled, ...rest } = opts;
-  const startTime = ctx.currentTime + SCHEDULE_AHEAD_S;
-  const scheduler = createBeatScheduler({ ...rest, startTime });
+export function startMetronome({ ctx, pattern, bpm }: MetronomeOptions): Metronome {
+  // 첫 박의 리드를 예약 윈도우의 절반으로 둔다. 윈도우와 같게 잡으면 첫 박이
+  // 경계 밖이라 첫 tick이 잡지 못하고, 타이머가 밀리면 첫 클릭을 통째로
+  // 놓치면서 startTime만 남아 판정 기준점이 어긋난다.
+  const startTime = ctx.currentTime + SCHEDULE_AHEAD_S / 2;
+  const scheduler = createBeatScheduler({
+    startTime,
+    bpm,
+    beatsPerBar: pattern.timeSignature[0],
+    accents: pattern.accents,
+  });
 
-  const timer = setInterval(() => {
+  // 클릭을 마스터 게인 하나에 모아 둔다. 중지할 때 예약된 오실레이터를 일일이
+  // 추적하지 않고 이 노드만 끊으면 되기 때문이다.
+  const master = ctx.createGain();
+  master.connect(ctx.destination);
+
+  const tick = () => {
     for (const beat of scheduler.pull(ctx.currentTime)) {
-      scheduleClick(ctx, beat.time, beat.isAccent);
+      // 이미 지난 박은 버린다. 백그라운드 탭에서 타이머가 초 단위로 스로틀되면
+      // 밀린 박이 한꺼번에 나오는데, 과거 시각으로 예약하면 전부 동시에 울린다.
+      if (beat.time >= ctx.currentTime) {
+        scheduleClick(ctx, master, beat.time, beat.isAccent);
+      }
     }
-    if (scheduler.isDone()) {
-      clearInterval(timer);
-      onScheduled?.();
-    }
-  }, LOOKAHEAD_INTERVAL_MS);
+    if (scheduler.isDone()) clearInterval(timer);
+  };
+
+  const timer = setInterval(tick, LOOKAHEAD_INTERVAL_MS);
+  // 첫 예약은 타이머를 기다리지 않는다. 메인 스레드가 막혀 첫 tick이 밀려도
+  // 첫 클릭은 이미 예약되어 있어야 한다.
+  tick();
 
   return {
     startTime,
-    beatAt: (now) => scheduler.beatAt(now),
-    stop: () => clearInterval(timer),
+    endTime: scheduler.endTime,
+    beatAt: scheduler.beatAt,
+    stop() {
+      clearInterval(timer);
+      master.disconnect(); // 예약이 끝난 클릭도 소리로 나가지 않는다
+    },
   };
 }
