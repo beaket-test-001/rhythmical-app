@@ -10,6 +10,8 @@
 //   - 백그라운드 전환 시 중지 처리
 //   - 패턴별 최고 기록 저장과 새로고침 후 유지
 //   - 화면 회전 시 크래시 없음
+//   - 단계 전환 시 비트 인디케이터 위치 유지
+//   - 지연 보정 설정이 판정에 반영되는지
 //
 // 덮지 못하는 항목(실기기 필요):
 //   - 실제 오디오 재생 여부(헤드리스에는 출력 장치가 없다)
@@ -100,6 +102,20 @@ const check = (ok, label, detail = '') => {
 const openPattern = async (id) => {
   await evaluate(`document.querySelector('[data-pattern="${id}"]').click()`);
   await until("!!document.querySelector('.practice')", `${id} 연습 화면`);
+};
+
+/** 설정 모달에서 지연 보정을 바꾼다. */
+const setOffset = async (ms) => {
+  await evaluate("document.querySelector('.topbar__settings').click()");
+  await evaluate(`
+    (() => {
+      const s = document.querySelector('.settings__slider');
+      s.value = '${ms}';
+      s.dispatchEvent(new Event('input', { bubbles: true }));
+    })()
+  `);
+  await evaluate("document.querySelector('.settings__close').click()");
+  await wait(150);
 };
 
 /** 세션을 시작하고 한 박 간격으로 계속 탭한다. */
@@ -251,7 +267,89 @@ try {
   );
   check(shown === 5, '새로고침 후에도 최고 기록 유지', `${shown}종 표시`);
 
-  console.log('\n[4] 중지 경로 (결과 미저장)');
+
+  console.log('\n[4] 지연 보정이 판정에 반영되는지');
+  // 한 박 간격으로 정확히 치면 보정 0에서는 전부 perfect다. 보정을 +200ms 주면
+  // 판정 시각이 200ms 앞으로 밀려 허용 오차(±120ms) 밖으로 나가야 한다.
+  // 여기서 정확도가 그대로면 설정이 판정까지 닿지 않는 것이다.
+  await evaluate("localStorage.clear()");
+  await send('Page.reload');
+  await until("!!document.querySelector('.list')", '목록');
+
+  const runQuarter = async () => {
+    await openPattern('quarter');
+    await evaluate(`
+      (() => {
+        const s = document.querySelector('.bpm__slider');
+        s.value = '120';
+        s.dispatchEvent(new Event('input', { bubbles: true }));
+      })()
+    `);
+    await startTapping(120, false);
+    await until("!!document.querySelector('.result')", '결과 화면', 45000);
+    await stopTapping();
+    const counts = await evaluate(
+      "[...document.querySelectorAll('.result__counts dd')].map(e => Number(e.textContent.trim()))",
+    );
+    await evaluate(
+      "[...document.querySelectorAll('.result__actions button')].find(b=>b.textContent.trim()==='목록으로').click()",
+    );
+    await until("!!document.querySelector('.list')", '목록 복귀');
+    return counts; // [perfect, good, miss, extraTaps]
+  };
+
+  const noOffset = await runQuarter();
+  await setOffset(200);
+  const withOffset = await runQuarter();
+  check(
+    (noOffset[0] ?? 0) > 0 && (withOffset[0] ?? 0) === 0,
+    '지연 보정 +200ms가 판정 시각을 실제로 옮긴다',
+    `보정 0 → Perfect ${noOffset[0]} / 보정 200 → Perfect ${withOffset[0]}, Miss ${withOffset[2]}`,
+  );
+  await setOffset(0);
+  check(
+    (await evaluate("JSON.parse(localStorage.getItem('rhythmical.settings.v1')).offsetMs")) === 0,
+    '설정이 localStorage에 즉시 저장된다',
+  );
+
+  console.log('\n[5] 레이아웃 안정성');
+  // 카운트다운이 뜨고 사라질 때 비트 인디케이터가 움직이면, 연습 중 시선이
+  // 한 곳에 머물러야 한다는 디자인 원칙이 깨진다.
+  await openPattern('quarter');
+  const beatsTop = () =>
+    evaluate("Math.round(document.querySelector('.beats').getBoundingClientRect().top)");
+  const beforeStart = await beatsTop();
+  await startTapping(120, false);
+  await until("document.querySelector('.countdown').textContent !== ''", '카운트인', 8000);
+  const duringCountIn = await beatsTop();
+  await until("document.querySelector('.countdown').textContent === ''", '연습 구간', 12000);
+  const duringPlay = await beatsTop();
+  // 판정 플래시가 떠 있는 순간도 확인한다. 겹침 칸의 나머지 절반이다.
+  await until("document.querySelector('.flash').className.includes('flash--')",
+    '판정 플래시 표시', 10000);
+  const duringFlash = await beatsTop();
+  await stopTapping();
+  // 0 === 0 === 0으로 통과하지 않도록 실제 위치가 잡혔는지 먼저 본다
+  check(
+    beforeStart > 0 &&
+      beforeStart === duringCountIn &&
+      duringCountIn === duringPlay &&
+      duringPlay === duringFlash,
+    '단계가 바뀌어도 비트 인디케이터가 움직이지 않는다',
+    `시작 전 ${beforeStart} / 카운트인 ${duringCountIn} / 연습 ${duringPlay} / 플래시 ${duringFlash}`,
+  );
+  check(
+    !(await evaluate(`(() => {
+      const cd = document.querySelector('.countdown');
+      const fl = document.querySelector('.flash');
+      return cd.textContent !== '' && fl.className.includes('flash--');
+    })()`)),
+    '카운트다운과 판정 플래시가 동시에 뜨지 않는다',
+  );
+  await evaluate("document.querySelector('.topbar__back').click()");
+  await until("!!document.querySelector('.list')", '목록 복귀');
+
+  console.log('\n[6] 중지 경로 (결과 미저장)');
   await evaluate("localStorage.removeItem('rhythmical.records.v1')");
   await send('Page.reload');
   await until("!!document.querySelector('.list')", '목록');
@@ -270,7 +368,7 @@ try {
     '카운트인 중 중지 시 기록 미저장',
   );
 
-  console.log('\n[5] 백그라운드 전환과 화면 회전');
+  console.log('\n[7] 백그라운드 전환과 화면 회전');
   await openPattern('quarter');
   await startTapping(120, false);
   await until("!!document.querySelector('.beat--on')", '재생 시작', 10000);

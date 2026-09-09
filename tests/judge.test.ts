@@ -203,6 +203,25 @@ describe('createJudger — 정확도 집계 (§3)', () => {
   });
 });
 
+describe('createJudger — 판정 시작 시각', () => {
+  const expected = expectedTapTimes(quarter, 80, 0);
+
+  it('첫 기대 탭의 허용 창이 열리는 시각이다', () => {
+    expect(createJudger(expected, 0).acceptsFrom).toBeCloseTo(expected[0]! - 0.12, 10);
+  });
+
+  it('지연 보정만큼 뒤로 밀린다', () => {
+    expect(createJudger(expected, 200).acceptsFrom).toBeCloseTo(expected[0]! + 0.08, 10);
+  });
+
+  it('이 시각 전후로 판정 여부가 갈린다', () => {
+    const judger = createJudger(expected, 0);
+    // 경계 직전은 카운트인이라 무시, 직후는 판정 대상
+    expect(judger.tap(createJudger(expected, 0).acceptsFrom - 0.001)).toBe('ignored');
+    expect(createJudger(expected, 0).tap(expected[0]! - 0.119)).toBe('good');
+  });
+});
+
 describe('createJudger — 판정 확정 시각', () => {
   const expected = expectedTapTimes(quarter, 80, 0);
 
