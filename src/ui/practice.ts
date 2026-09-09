@@ -4,6 +4,7 @@
 // mountPractice는 그 위에 붙는 렌더링이다. 타이밍 판단을 DOM에서 떼어 놓아야
 // 브라우저 없이 검증할 수 있다.
 import { startMetronome, type Beat } from '../audio/metronome';
+import { track } from '../analytics';
 import { COUNT_IN_BARS } from '../constants';
 import { createJudger, expectedTapTimes, type TapOutcome } from '../core/judge';
 import type { Pattern, SessionResult } from '../types';
@@ -200,6 +201,8 @@ export function mountPractice(
   let endTimer = 0;
   let shownBeat = -1;
   let lastFlashAt = -Infinity;
+  /** 중도 이탈 시 얼마나 하다 그만뒀는지 재기 위한 시작 시각. */
+  let startedAtMs = 0;
 
   /**
    * 판정 플래시.
@@ -322,6 +325,8 @@ export function mountPractice(
     ctx = audio;
     session = startSession({ ctx, pattern, bpm, offsetMs });
     stage = 'running';
+    startedAtMs = performance.now();
+    track('practice_start', { pattern_id: pattern.id, bpm });
 
     slider.disabled = true; // 재생 중에는 BPM만 잠근다. ← 뒤로가기는 계속 열려 있다
     tapHint.textContent = '';
@@ -349,7 +354,15 @@ export function mountPractice(
   }
 
   function exit() {
+    // teardown이 stage를 바꾸므로 먼저 읽는다
+    const wasPlaying = stage === 'running' || stage === 'starting';
     teardown();
+    if (wasPlaying) {
+      track('practice_abort', {
+        pattern_id: pattern.id,
+        elapsed_sec: Math.round((performance.now() - startedAtMs) / 1000),
+      });
+    }
     onExit();
   }
 

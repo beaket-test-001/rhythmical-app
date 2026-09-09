@@ -4,10 +4,12 @@
 // 돌려주는 규약을 지키고, 여기서는 전환할 때마다 이전 화면을 반드시 걷어낸다.
 // 그래야 타이머 · 리스너 · AudioContext가 화면 수만큼 쌓이지 않는다.
 import './style.css';
+import { track } from './analytics';
 import { loadSettings, saveRecord } from './storage';
 import { mountList } from './ui/list';
 import { mountPractice } from './ui/practice';
 import { mountResult } from './ui/result';
+import { openSettings } from './ui/settings';
 import type { Pattern, SessionResult } from './types';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
@@ -32,8 +34,8 @@ function showList() {
   show((root) =>
     mountList(root, {
       onSelect: (pattern) => showPractice(pattern, pattern.bpmDefault),
-      // TODO: 설정 모달은 T11에서 붙인다
-      onOpenSettings: () => void 0,
+      // 모달은 라우터가 관리하는 화면 밖(body)에 붙고 스스로 닫힌다
+      onOpenSettings: () => void openSettings(),
     }),
   );
 }
@@ -57,11 +59,27 @@ function showResult(pattern: Pattern, result: SessionResult) {
   // 알리면 목록 화면과 어긋난다(사양 §2 "저장 실패는 기록만 비활성").
   const isNewBest = saveRecord(result.patternId, result.accuracy);
 
+  track('practice_complete', {
+    pattern_id: result.patternId,
+    bpm: result.bpm,
+    accuracy: result.accuracy,
+    perfect: result.counts.perfect,
+    good: result.counts.good,
+    miss: result.counts.miss,
+    extra_taps: result.extraTaps,
+    is_new_best: isNewBest,
+  });
+
   show((root) =>
     mountResult(root, {
       result,
       isNewBest,
-      onRetry: () => showPractice(pattern, result.bpm),
+      onRetry: () => {
+        track('retry', { pattern_id: pattern.id });
+        // 사양 §4는 finished → countIn. 다시하기 클릭 자체가 사용자
+        // 제스처라 한 번 더 탭하지 않아도 오디오를 시작할 수 있다.
+        showPractice(pattern, result.bpm, true);
+      },
       onList: showList,
     }),
   );
