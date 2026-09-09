@@ -1,4 +1,5 @@
 // 패턴 목록 화면 — Tech Spec §6, 디자인 문서.
+import { FEEDBACK_URL } from '../constants';
 import { PATTERNS } from '../core/patterns';
 import { loadRecords } from '../storage';
 import type { Pattern } from '../types';
@@ -38,6 +39,11 @@ export function mountList(
         <button class="topbar__settings" type="button" aria-label="설정 열기">⚙</button>
       </header>
       <ul class="cards">${cards}</ul>
+      <footer class="footer">
+        <a class="footer__link" href="${FEEDBACK_URL}" target="_blank" rel="noopener noreferrer">
+          의견 보내기
+        </a>
+      </footer>
     </section>
   `;
 

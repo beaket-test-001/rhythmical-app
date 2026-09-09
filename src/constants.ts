@@ -18,3 +18,14 @@ export const SCHEDULE_AHEAD_S = 0.1; // 선행 예약 윈도우
 // localStorage 키 — Tech Spec §2. 스키마가 바뀌면 v2로 올린다.
 export const RECORDS_KEY = 'rhythmical.records.v1';
 export const SETTINGS_KEY = 'rhythmical.settings.v1';
+
+/**
+ * 의견 보내기 창구.
+ *
+ * 계정 없이 보낼 수 있는 창구(구글 폼 등)가 준비되면 이 값만 바꾼다.
+ * 지금 GitHub Issues를 쓰는 이유는, 창구의 종류보다 창구가 아예 없는 것이
+ * 문제이기 때문이다 — 계측도 에러 리포팅도 없어서 앱이 특정 기기에서
+ * 완전히 깨져 있어도 알아낼 경로가 하나도 없다.
+ */
+export const FEEDBACK_URL =
+  'https://github.com/beaket-test-001/rhythmical-app/issues/new';
