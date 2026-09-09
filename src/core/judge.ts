@@ -10,7 +10,13 @@ import {
   PERFECT_WINDOW_MS,
   PLAY_BARS,
 } from '../constants';
-import type { Pattern, PatternId, SessionResult, Verdict } from '../types';
+import type {
+  Pattern,
+  PatternId,
+  SessionResult,
+  TapJudgment,
+  Verdict,
+} from '../types';
 
 /** 부동소수점 비교 오차 흡수용. 1e-6ms = 1피코초 수준이라 판정에 영향이 없다. */
 const EPSILON_MS = 1e-6;
@@ -91,6 +97,21 @@ export interface Judger {
   /** now 시점까지 miss가 확정된 기대 탭의 인덱스. 한 번 보고한 건 다시 나오지 않는다. */
   collectMisses(now: number): number[];
   /**
+   * 기대 탭별 판정 기록 (Tech Spec §2). 집계(result)는 이 값에서 파생된다.
+   * 시각은 모두 보정 후 축이라 deltaMs = (tapTime − expectedTime) × 1000이다.
+   *
+   * 주의: collectMisses가 miss를 확정해도 기록은 바뀌지 않는다. 초기 verdict가
+   * 이미 miss라 종료 후 집계는 맞지만, "확정된 miss"와 "아직 마감 전"은
+   * 구분되지 않는다. 세션 진행 중에 이 값을 화면에 쓰려면 그때 구분을 넣어라.
+   *
+   * TODO: v0.1 화면에는 소비처가 없다(분포만 표시). 사양 §6의 보정 도우미
+   *       (P2, "8회 탭 → 평균 오차 제안")가 deltaMs를 쓸 때 첫 소비자가 된다.
+   *       그때까지 이 접근자의 유일한 소비자는 테스트다. 다만 지우면 deltaMs가
+   *       아무도 읽지 않는 필드가 되어, 이 변경이 없애려던 미사용 상태가
+   *       필드 단위로 되살아난다.
+   */
+  judgments(): TapJudgment[];
+  /**
    * 세션 집계. 미매칭 기대 탭은 모두 miss로 계산한다.
    * @param playedAt 생략하면 호출 시각. 테스트에서 고정하기 위한 인자다.
    */
@@ -107,8 +128,20 @@ export interface Judger {
  */
 export function createJudger(expected: number[], offsetMs: number): Judger {
   const windows = tapWindows(expected);
-  /** 기대 탭별 판정. null이면 아직 미매칭. */
-  const verdicts: (MatchedVerdict | null)[] = expected.map(() => null);
+
+  /**
+   * 기대 탭별 판정 기록. 미입력이면 tapTime이 null이고, 사양 §5가 "Miss =
+   * 미매칭 기대 탭"이라 규정하므로 초기 verdict는 miss다.
+   *
+   * 집계(counts)는 이 배열에서 파생된다. 판정 상태를 두 곳에 두면 화면에
+   * 보이는 것과 최종 결과가 어긋날 수 있다 — 이미 겪은 실패다.
+   */
+  const judgments: TapJudgment[] = expected.map((expectedTime) => ({
+    expectedTime,
+    tapTime: null,
+    deltaMs: null,
+    verdict: 'miss',
+  }));
   const missReported = expected.map(() => false);
 
   /** 채터링 판정 기준. 무시된 입력도 포함한다 — 바운스는 연쇄로 들어오기 때문. */
@@ -128,7 +161,7 @@ export function createJudger(expected: number[], offsetMs: number): Judger {
     let best = -1;
     let bestDistance = Infinity;
     for (let i = 0; i < expected.length; i++) {
-      if (verdicts[i] !== null) continue;
+      if (judgments[i]!.tapTime !== null) continue;
       const distance = Math.abs(time - expected[i]!);
       if (distance < bestDistance) {
         bestDistance = distance;
@@ -172,17 +205,29 @@ export function createJudger(expected: number[], offsetMs: number): Judger {
         return 'extra';
       }
 
-      // 5. 해당 기대 탭의 허용 오차 안이면 매칭 확정
-      const distanceMs = Math.abs(adjusted - expected[index]!) * 1000;
+      // 5. 해당 기대 탭의 허용 오차 안이면 매칭 확정.
+      //    기록의 세 시각은 모두 보정 후 축이다. 사양 §2가 deltaMs를
+      //    "tap - expected (보정 후)"라는 등식으로 정의하므로, tapTime에
+      //    보정 전 시각을 넣으면 그 등식이 레코드 안에서 깨진다. 그러면
+      //    perfect인데 tapTime - expectedTime은 창 밖인 기록이 나온다.
+      //    사용자가 실제로 친 시각이 필요하면 tapTime + offsetMs / 1000이다.
+      const signedDeltaMs = (adjusted - expected[index]!) * 1000;
+      const distanceMs = Math.abs(signedDeltaMs);
       const tapWindow = windows[index]!;
-      if (distanceMs <= tapWindow.perfectMs + EPSILON_MS) {
-        verdicts[index] = 'perfect';
-        return 'perfect';
-      }
-      if (distanceMs <= tapWindow.goodMs + EPSILON_MS) {
-        verdicts[index] = 'good';
-        return 'good';
-      }
+
+      const settle = (verdict: MatchedVerdict): MatchedVerdict => {
+        judgments[index] = {
+          // expectedTime은 이미 기록에 있다. 다시 파생시키면 출처가 둘이 된다
+          ...judgments[index]!,
+          tapTime: adjusted,
+          deltaMs: signedDeltaMs,
+          verdict,
+        };
+        return verdict;
+      };
+
+      if (distanceMs <= tapWindow.perfectMs + EPSILON_MS) return settle('perfect');
+      if (distanceMs <= tapWindow.goodMs + EPSILON_MS) return settle('good');
 
       // 6. 창 밖의 입력은 추가 탭으로 별도 집계 (정확도 분모에 불포함)
       extraTaps++;
@@ -192,7 +237,7 @@ export function createJudger(expected: number[], offsetMs: number): Judger {
     collectMisses(now) {
       const confirmed: number[] = [];
       for (let i = 0; i < expected.length; i++) {
-        if (verdicts[i] !== null || missReported[i]) continue;
+        if (judgments[i]!.tapTime !== null || missReported[i]) continue;
         // 마감은 tap()과 같은 축에서 계산해야 한다. tap()이 raw에서 offset을
         // 빼고 비교하므로, raw 축의 유효 창은 expected + offset을 중심으로 열린다.
         // 이 항을 빼먹으면 offset이 클 때 창이 열리기도 전에 miss가 확정되어
@@ -206,10 +251,15 @@ export function createJudger(expected: number[], offsetMs: number): Judger {
       return confirmed;
     },
 
+    // 호출자가 고쳐도 판정기 상태가 흔들리지 않도록 복사해서 준다
+    judgments: () => judgments.map((judgment) => ({ ...judgment })),
+
     result(patternId, bpm, playedAt = new Date().toISOString()) {
-      const perfect = verdicts.filter((v) => v === 'perfect').length;
-      const good = verdicts.filter((v) => v === 'good').length;
-      const miss = expected.length - perfect - good;
+      const count = (verdict: Verdict) =>
+        judgments.filter((judgment) => judgment.verdict === verdict).length;
+      const perfect = count('perfect');
+      const good = count('good');
+      const miss = count('miss');
 
       const score = perfect * 1.0 + good * 0.5;
       const raw = expected.length === 0 ? 0 : (score / expected.length) * 100;
