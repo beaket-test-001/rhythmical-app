@@ -61,6 +61,14 @@ describe('기록 저장', () => {
     expect(loadRecords()).toHaveLength(2);
   });
 
+  it('범위 밖 정확도는 저장하지 않는다 — 읽기가 버릴 값이라 배지만 뜨는 상태를 막는다', () => {
+    expect(saveRecord('quarter', 150)).toBe(false);
+    expect(saveRecord('quarter', -1)).toBe(false);
+    expect(saveRecord('quarter', NaN)).toBe(false);
+    expect(bestAccuracy('quarter')).toBeNull();
+    expect(loadRecords()).toEqual([]);
+  });
+
   it('저장 시각을 ISO 8601로 남긴다', () => {
     saveRecord('quarter', 90);
     expect(Date.parse(loadRecords()[0]!.updatedAt)).not.toBeNaN();
@@ -86,6 +94,7 @@ describe('저장소 오염 방어 — localStorage는 사용자가 편집할 수
         { patternId: '없는패턴', bestAccuracy: 90, updatedAt: '2026-09-09T00:00:00.000Z' },
         { patternId: 'eighth', bestAccuracy: '90', updatedAt: '2026-09-09T00:00:00.000Z' },
         { patternId: 'triplet', bestAccuracy: 150, updatedAt: '2026-09-09T00:00:00.000Z' },
+        { patternId: 'syncopation', bestAccuracy: 90, updatedAt: '어제' },
         null,
       ]),
     );
@@ -125,8 +134,20 @@ describe('설정 저장', () => {
     expect(loadSettings()).toEqual({ offsetMs: 0 });
   });
 
-  it('NaN 보정값은 기본값으로 되돌린다', () => {
-    seed(SETTINGS_KEY, '{"offsetMs":null}');
+  it('NaN 보정값을 저장해도 기본값으로 되돌아온다', () => {
+    saveSettings({ offsetMs: NaN }); // JSON.stringify는 NaN을 null로 쓴다
     expect(loadSettings().offsetMs).toBe(0);
+  });
+
+  it('직접 편집된 범위 밖 값도 읽을 때 잘라낸다', () => {
+    seed(SETTINGS_KEY, '{"offsetMs":9999}');
+    expect(loadSettings().offsetMs).toBe(OFFSET_MAX_MS);
+    seed(SETTINGS_KEY, '{"offsetMs":-9999}');
+    expect(loadSettings().offsetMs).toBe(OFFSET_MIN_MS);
+  });
+
+  it('저장이 실패해도 예외를 던지지 않는다', () => {
+    vi.stubGlobal('localStorage', fakeStorage(true));
+    expect(() => saveSettings({ offsetMs: 50 })).not.toThrow();
   });
 });
