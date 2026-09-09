@@ -360,3 +360,75 @@ body {
 h1:focus {
   outline: none;
 }
+
+/* 설정 모달 ------------------------------------------------------------- */
+.settings {
+  width: min(360px, calc(100vw - 32px));
+  padding: 20px;
+  border: 0;
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.settings::backdrop {
+  background: rgb(0 0 0 / 60%);
+}
+
+.settings__head {
+  display: flex;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.settings__title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.settings__close {
+  min-width: 44px;
+  min-height: 44px;
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  color: var(--text-sub);
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.settings__field {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.settings__label {
+  grid-column: 1;
+  font-size: 16px;
+}
+
+.settings__slider {
+  accent-color: var(--accent);
+}
+
+.settings__value {
+  grid-column: 3;
+  color: var(--text-sub);
+  text-align: right;
+}
+
+.settings__hint {
+  margin: 12px 0 0;
+  color: var(--text-sub);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.settings__bound {
+  color: var(--text-sub);
+  font-size: 12px;
+  white-space: nowrap;
+}
