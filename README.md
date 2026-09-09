@@ -63,8 +63,8 @@ npm run smoke                 # 데스크톱 Chrome 스모크 (preview 서버 �
 3. 기기 매트릭스 3종에서 콘솔 에러 0건
 
 ```bash
-git tag -a v0.1.0 -m "MVP v0.1.0"
-git push origin v0.1.0
+git tag -a v1.0.0 -m "리드미컬 v1.0.0"
+git push origin v1.0.0
 ```
 
 ## 문서
