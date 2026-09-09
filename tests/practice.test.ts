@@ -62,14 +62,20 @@ describe('startSession — 진행 단계', () => {
     session.stop();
   });
 
-  it('카운트인 1마디가 지나면 연습 구간으로 넘어간다', () => {
+  it('카운트인은 마디 경계가 아니라 판정이 시작되는 시각에 끝난다', () => {
+    // 첫 기대 탭의 허용 창(±120ms)은 마디 경계보다 조금 먼저 열린다.
+    // 그 사이의 탭은 정상 판정되므로 화면도 이때 연습 구간으로 넘어가야 한다.
     const { session, seek } = setup();
     const playStart = START_LEAD + COUNT_IN_BARS * 4;
+    const acceptsFrom = playStart - 0.12;
 
-    seek(playStart - 0.01);
-    expect(session.poll(playStart - 0.01).phase).toBe('countIn');
-    seek(playStart);
-    expect(session.poll(playStart)).toMatchObject({ phase: 'playing', countdown: null });
+    seek(acceptsFrom - 0.01);
+    expect(session.poll(acceptsFrom - 0.01).phase).toBe('countIn');
+    seek(acceptsFrom + 0.01);
+    expect(session.poll(acceptsFrom + 0.01)).toMatchObject({
+      phase: 'playing',
+      countdown: null,
+    });
     session.stop();
   });
 

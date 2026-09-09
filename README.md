@@ -43,12 +43,20 @@ Vite + TypeScript (프레임워크 없음) · Web Audio API · localStorage · V
 ```bash
 npm test && npm run build     # 단위 테스트 + 타입 체크 + 빌드
 npm run smoke                 # 데스크톱 Chrome 스모크 (preview 서버 실행 후)
+```
+
+**태그는 아래 게이트를 모두 통과한 뒤에 붙인다.** 검증되지 않은 커밋에
+버전이 박히면 롤백 기준점이 흐려진다.
+
+1. 사양서의 완료 조건(AC) 전 항목 통과
+2. 스모크 체크리스트 전 항목 통과 — 자동화 범위 밖인 **iOS Safari ·
+   Android Chrome 실기기 확인 포함**
+3. 기기 매트릭스 3종에서 콘솔 에러 0건
+
+```bash
 git tag -a v0.1.0 -m "MVP v0.1.0"
 git push origin v0.1.0
 ```
-
-실기기 확인(iOS Safari · Android Chrome)은 스모크 자동화 범위 밖이므로
-릴리즈 전 수동으로 거친다.
 
 ## 문서
 

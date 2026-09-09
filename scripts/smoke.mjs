@@ -324,11 +324,27 @@ try {
   const duringCountIn = await beatsTop();
   await until("document.querySelector('.countdown').textContent === ''", '연습 구간', 12000);
   const duringPlay = await beatsTop();
+  // 판정 플래시가 떠 있는 순간도 확인한다. 겹침 칸의 나머지 절반이다.
+  await until("document.querySelector('.flash').className.includes('flash--')",
+    '판정 플래시 표시', 10000);
+  const duringFlash = await beatsTop();
   await stopTapping();
+  // 0 === 0 === 0으로 통과하지 않도록 실제 위치가 잡혔는지 먼저 본다
   check(
-    beforeStart === duringCountIn && duringCountIn === duringPlay,
+    beforeStart > 0 &&
+      beforeStart === duringCountIn &&
+      duringCountIn === duringPlay &&
+      duringPlay === duringFlash,
     '단계가 바뀌어도 비트 인디케이터가 움직이지 않는다',
-    `시작 전 ${beforeStart} / 카운트인 ${duringCountIn} / 연습 ${duringPlay}`,
+    `시작 전 ${beforeStart} / 카운트인 ${duringCountIn} / 연습 ${duringPlay} / 플래시 ${duringFlash}`,
+  );
+  check(
+    !(await evaluate(`(() => {
+      const cd = document.querySelector('.countdown');
+      const fl = document.querySelector('.flash');
+      return cd.textContent !== '' && fl.className.includes('flash--');
+    })()`)),
+    '카운트다운과 판정 플래시가 동시에 뜨지 않는다',
   );
   await evaluate("document.querySelector('.topbar__back').click()");
   await until("!!document.querySelector('.list')", '목록 복귀');

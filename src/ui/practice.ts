@@ -66,7 +66,10 @@ export function startSession({
   const beatsPerBar = pattern.timeSignature[0];
   const secondsPerBeat = 60 / bpm;
   const countInBeats = COUNT_IN_BARS * beatsPerBar;
-  const countInEndsAt = metronome.startTime + countInBeats * secondsPerBeat;
+  // 마디 경계가 아니라 판정이 시작되는 시각을 카운트인의 끝으로 삼는다.
+  // 첫 기대 탭의 허용 창은 마디 경계보다 조금 먼저 열리는데, 그 사이에
+  // 들어온 탭은 정상 판정되므로 카운트다운이 남아 있으면 플래시와 겹친다.
+  const countInEndsAt = judger.acceptsFrom;
 
   // 마디가 끝나도 마지막 판정 창이 아직 안 닫혔을 수 있다. 늦은 쪽까지 기다린다.
   const finishesAt = Math.max(metronome.endTime, judger.settledAt);
@@ -168,9 +171,9 @@ export function mountPractice(
       </header>
       <div class="stage">
         <div class="beats" aria-hidden="true">${dots}</div>
-        <!-- 카운트다운과 판정 플래시는 같은 칸에 겹쳐 둔다. 카운트인 중에는
-             판정이 없어 둘이 동시에 뜨지 않고, 높이가 고정되어야 단계가
-             바뀔 때 비트 인디케이터가 움직이지 않는다. -->
+        <!-- 카운트다운과 판정 플래시는 같은 칸에 겹쳐 둔다. 카운트인은
+             판정이 시작되는 시각에 끝나므로 둘이 동시에 뜨지 않고,
+             높이가 고정되어야 단계가 바뀔 때 인디케이터가 움직이지 않는다. -->
         <div class="feedback">
           <p class="countdown" aria-hidden="true"></p>
           <!-- 초당 여러 번 바뀌는 시각 피드백이라 스크린리더에는 읽히지 않는다.

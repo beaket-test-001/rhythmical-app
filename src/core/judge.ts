@@ -69,6 +69,15 @@ export function tapWindows(expected: number[]): TapWindow[] {
 
 export interface Judger {
   /**
+   * 이 시각부터 탭이 판정된다. 첫 기대 탭의 허용 창이 열리는 때이며,
+   * 그 전은 카운트인 구간이라 판정하지 않는다 (PRD §5).
+   *
+   * 화면도 이 시각을 카운트인의 끝으로 삼아야 한다. 마디 경계를 기준으로
+   * 삼으면 마지막 허용 창이 열린 뒤에도 카운트다운이 남아, 판정 플래시와
+   * 카운트다운이 같은 자리에 겹쳐 그려진다.
+   */
+  readonly acceptsFrom: number;
+  /**
    * 모든 판정이 확정되는 시각. 마지막 기대 탭의 허용 창이 닫히는 때다.
    *
    * 마디가 끝나는 시각보다 늦을 수 있다. 예를 들어 120BPM eighth-mix는
@@ -132,6 +141,10 @@ export function createJudger(expected: number[], offsetMs: number): Judger {
   const lastIndex = expected.length - 1;
 
   return {
+    // 판정기는 보정된 축에서 비교하지만, 화면은 보정 없는 시각을 넘긴다.
+    // 그래서 raw 축으로 되돌려 준다.
+    acceptsFrom: countInEndsAt + offsetMs / 1000,
+
     settledAt:
       lastIndex < 0
         ? 0

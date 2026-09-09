@@ -8,6 +8,10 @@
   --good: #facc15;
   --miss: #f87171;
   --accent: #7c6cff;
+  /* 눌렸을 때의 surface. 카드와 탭 영역이 함께 쓴다 */
+  --surface-active: #23272f;
+  /* 카운트다운 글자 크기. 겹침 칸의 높이가 여기에 묶여 있다 */
+  --countdown-size: 64px;
 }
 
 * {
@@ -36,7 +40,7 @@ body {
   align-items: center;
   gap: 12px;
   /* 노치 · 상태바 아래로 내려간다 */
-  padding: calc(8px + env(safe-area-inset-top)) 12px 8px;
+  padding: calc(8px + env(safe-area-inset-top, 0px)) 12px 8px;
 }
 
 .topbar__back {
@@ -118,9 +122,9 @@ body {
 .feedback {
   display: grid;
   place-items: center;
-  /* 카운트다운(64px)이 들어갈 자리를 늘 비워 둔다 — 단계가 바뀌어도
-     비트 인디케이터가 움직이지 않게 하기 위해서다. */
-  min-height: 72px;
+  /* 카운트다운이 들어갈 자리를 늘 비워 둔다 — 단계가 바뀌어도 비트
+     인디케이터가 움직이지 않게 하기 위해서다. */
+  min-height: calc(var(--countdown-size) + 8px);
 }
 
 .feedback > * {
@@ -129,7 +133,7 @@ body {
 
 .countdown {
   margin: 0;
-  font-size: 64px;
+  font-size: var(--countdown-size);
   font-weight: 700;
   line-height: 1;
   color: var(--text-sub);
@@ -179,11 +183,16 @@ body {
   /* 길게 눌렀을 때 뜨는 iOS 컨텍스트 메뉴를 막는다 */
   -webkit-touch-callout: none;
   /* 홈 인디케이터에 가리지 않도록 */
-  padding-bottom: env(safe-area-inset-bottom);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 .tap-area:active {
-  background: #23272f;
+  background: var(--surface-active);
+}
+
+/* 탭 영역은 화면 끝에 붙어 있어 바깥쪽 아웃라인이 잘린다 */
+.tap-area:focus-visible {
+  outline-offset: -4px;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -203,7 +212,7 @@ body {
 
 /* perfect일 때 인디케이터 펄스 */
 .beats--pulse {
-  animation: beat-pulse 0.2s ease-out;
+  animation: beat-pulse 0.1s ease-out;
 }
 
 @keyframes beat-pulse {
@@ -280,7 +289,7 @@ body {
 }
 
 .card:active {
-  background: #23272f;
+  background: var(--surface-active);
 }
 
 /* 결과 ------------------------------------------------------------------ */
@@ -372,7 +381,8 @@ body {
   white-space: nowrap;
 }
 
-/* 포커스 이동용 제목에는 기본 아웃라인을 띄우지 않는다 */
+/* 포커스 이동용 제목에는 테두리를 띄우지 않는다. tabindex="-1"이라 사용자가
+   직접 탭 이동할 수 없고, 프로그램이 옮긴 포커스는 알릴 대상이 아니다. */
 h1:focus {
   outline: none;
 }
@@ -454,9 +464,4 @@ h1:focus {
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
-}
-
-/* 포커스 이동용 제목은 프로그램이 옮긴 것이라 테두리를 띄우지 않는다 */
-h1:focus-visible {
-  outline: none;
 }
