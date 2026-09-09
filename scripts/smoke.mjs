@@ -17,14 +17,14 @@
 //   - 실제 오디오 재생 여부(헤드리스에는 출력 장치가 없다)
 //   - iOS Safari · Android Chrome 동작, 터치 입력 지연
 //
-// 사용법: npm run build && npx vite preview --port 4319 & node scripts/smoke.mjs
+// 사용법: npm run build && npx vite preview --port 4319 & npm run smoke
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const APP = process.argv[2] ?? 'http://localhost:4319/';
-const PORT = 9333;
+// base 경로(/rhythmical-app/) 아래에서 서빙되므로 preview URL도 같은 경로다.
+const APP = process.argv[2] ?? 'http://localhost:4319/rhythmical-app/';
 const CHROME =
   process.env.CHROME_PATH ??
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
@@ -47,12 +47,57 @@ const chrome = spawn(
     '--no-first-run',
     '--no-default-browser-check',
     '--autoplay-policy=no-user-gesture-required',
-    `--remote-debugging-port=${PORT}`,
+    // 포트를 고정하면 앞선 실행이 남아 있을 때 그 브라우저에 붙어 버린다.
+    // "Inspected target navigated or closed" 같은 엉뚱한 실패로 나타난다.
+    // 0을 주면 Chrome이 빈 포트를 골라 DevToolsActivePort에 적어 준다.
+    '--remote-debugging-port=0',
     `--user-data-dir=${profile}`,
     'about:blank',
   ],
   { stdio: 'ignore' },
 );
+
+/** 비정상 종료로 Chrome이나 임시 프로필이 남지 않게 한다. */
+const cleanup = () => {
+  try {
+    chrome.kill();
+  } catch {
+    // 이미 죽었으면 무시
+  }
+  try {
+    rmSync(profile, { recursive: true, force: true });
+  } catch {
+    // 지우지 못해도 진행
+  }
+};
+for (const signal of ['SIGINT', 'SIGTERM']) {
+  process.on(signal, () => {
+    cleanup();
+    process.exit(signal === 'SIGINT' ? 130 : 143);
+  });
+}
+
+/**
+ * Chrome이 고른 디버깅 포트. 프로필 디렉터리의 DevToolsActivePort에 적힌다.
+ *
+ * 파일은 1행 포트 / 2행 웹소켓 경로다. 쓰기가 원자적이지 않아 포트를 쓰다 만
+ * 상태("634")를 읽을 수 있으므로, 2행까지 도착한 뒤에만 받아들인다.
+ */
+const readDebugPort = async () => {
+  for (let i = 0; i < 80; i++) {
+    try {
+      const [port, wsPath] = readFileSync(
+        join(profile, 'DevToolsActivePort'),
+        'utf8',
+      ).split('\n');
+      if (port && wsPath?.startsWith('/devtools/')) return Number(port);
+    } catch {
+      // 아직 안 만들어졌다
+    }
+    await wait(125);
+  }
+  throw new Error('Chrome 디버깅 포트를 찾지 못했다');
+};
 
 let ws;
 let nextId = 1;
@@ -142,10 +187,11 @@ const startTapping = (bpm, useSpaceBar) => evaluate(`
 const stopTapping = () => evaluate('clearInterval(window.__taps)');
 
 try {
+  const port = await readDebugPort();
   let target;
-  for (let i = 0; i < 60 && !target; i++) {
+  for (let i = 0; i < 40 && !target; i++) {
     try {
-      const list = await (await fetch(`http://localhost:${PORT}/json/list`)).json();
+      const list = await (await fetch(`http://localhost:${port}/json/list`)).json();
       target = list.find((t) => t.type === 'page');
     } catch {
       await wait(250);
@@ -406,9 +452,6 @@ try {
     for (const f of failed) console.log(`  - ${f.label}`);
   }
   ws?.close();
-  chrome.kill();
-  try {
-    rmSync(profile, { recursive: true, force: true });
-  } catch {}
+  cleanup();
   process.exit(failed.length ? 1 : 0);
 }

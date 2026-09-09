@@ -6,7 +6,7 @@
 
 ```bash
 npm install
-npm run dev      # 개발 서버 (http://localhost:5173)
+npm run dev      # 개발 서버 (http://localhost:5173/rhythmical-app/)
 npm test         # style.css 구조 검사 + 단위 테스트 (Vitest)
 npm run build    # 타입 체크 + 프로덕션 빌드 → dist/
 ```
@@ -22,17 +22,26 @@ npx vite preview --port 4319 &
 npm run smoke
 ```
 
+`vite preview`도 `base`를 따르므로 실제 주소는 `http://localhost:4319/rhythmical-app/`이다.
+
 QA 문서의 체크리스트 중 **데스크톱 Chrome에서 자동화 가능한 항목**을 덮는다.
 실제 오디오 재생 여부와 iOS Safari · Android Chrome 동작, 터치 입력 지연은
 실기기 확인이 필요하다.
 
 ## 기술 스택
 
-Vite + TypeScript (프레임워크 없음) · Web Audio API · localStorage · Vercel 정적 호스팅
+Vite + TypeScript (프레임워크 없음) · Web Audio API · localStorage · GitHub Pages 정적 호스팅
 
 ## 배포
 
-`main` 브랜치 푸시 시 Vercel이 자동 배포한다. 빌드 명령 `npm run build`, 출력 디렉터리 `dist`.
+`main` 브랜치 푸시 시 GitHub Actions가 GitHub Pages로 자동 배포한다
+(`.github/workflows/deploy.yml`). 테스트와 타입 체크를 통과해야 배포된다.
+
+- 공개 주소: <https://beaket-test-001.github.io/rhythmical-app/>
+- 프로젝트 페이지라 `/rhythmical-app/` 아래에서 서빙된다. `vite.config.ts`의
+  `base`가 이 경로를 맞춘다 — 저장소 이름이 바뀌면 함께 고쳐야 한다.
+- 롤백은 되돌릴 커밋을 revert하고 다시 푸시한다(재빌드 몇 분). 즉시 롤백이
+  필요할 만큼 커지면 호스팅을 재검토한다.
 
 ## 릴리즈
 
