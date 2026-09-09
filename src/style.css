@@ -204,3 +204,159 @@ body {
     animation: none;
   }
 }
+
+/* 패턴 목록 ------------------------------------------------------------- */
+.list {
+  overflow-y: auto;
+}
+
+.topbar__settings {
+  min-width: 44px;
+  min-height: 44px;
+  margin-left: auto;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-sub);
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 4px 12px 24px;
+  list-style: none;
+}
+
+.card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 12px;
+  width: 100%;
+  padding: 16px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.card__name {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.card__bpm {
+  color: var(--text-sub);
+  font-size: 14px;
+  text-align: right;
+}
+
+.card__best {
+  grid-column: 1 / -1;
+  color: var(--text-sub);
+  font-size: 14px;
+}
+
+.card:active {
+  background: #23272f;
+}
+
+/* 결과 ------------------------------------------------------------------ */
+.result {
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+}
+
+.result__pattern {
+  margin: 0;
+  color: var(--text-sub);
+  font-size: 14px;
+}
+
+.result__accuracy {
+  margin: 0;
+  font-size: 64px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.result__badge {
+  margin: 0;
+  color: var(--accent);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.result__counts {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px 24px;
+  margin: 24px 0 32px;
+}
+
+.result__counts div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.result__counts dt {
+  color: var(--text-sub);
+  font-size: 14px;
+}
+
+.result__counts dd {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.result__actions {
+  display: flex;
+  gap: 12px;
+}
+
+.btn {
+  min-height: 44px;
+  padding: 0 24px;
+  border: 1px solid var(--surface);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.btn--primary {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+/* 화면에는 안 보이지만 스크린리더는 읽는 텍스트 */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* 포커스 이동용 제목에는 기본 아웃라인을 띄우지 않는다 */
+h1:focus {
+  outline: none;
+}
