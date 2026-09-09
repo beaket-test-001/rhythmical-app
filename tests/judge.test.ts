@@ -51,9 +51,11 @@ describe('tapWindows — 동적 윈도우 (§3.6)', () => {
 describe('createJudger — 판정 경계값 (§8)', () => {
   const expected = expectedTapTimes(quarter, 80, 0);
 
+  // 첫 기대 탭은 카운트인 경계와 맞닿아 있어, 순수한 매칭 경계는 중간 탭에서 본다
+  const TARGET = 4;
   const judgeOne = (deltaMs: number, offsetMs = 0) => {
     const j = createJudger(expected, offsetMs);
-    return j.tap(expected[0]! + ms(deltaMs));
+    return j.tap(expected[TARGET]! + ms(deltaMs));
   };
 
   it('오차 0ms는 perfect', () => expect(judgeOne(0)).toBe('perfect'));
@@ -80,7 +82,32 @@ describe('createJudger — 입력 처리 규칙', () => {
     expect(j.tap(expected[0]!)).toBe('perfect');
     expect(j.tap(expected[0]! + ms(30))).toBe('ignored');
     // 60ms를 넘기면 다시 받는다 (다음 기대 탭과는 멀어 추가 탭 처리)
-    expect(j.tap(expected[0]! + ms(70))).toBe('extra');
+    expect(j.tap(expected[0]! + ms(100))).toBe('extra');
+  });
+
+  it('정확히 60ms 간격도 무시한다 — PRD §5는 "60ms 이내"', () => {
+    const j = createJudger(expected, 0);
+    expect(j.tap(expected[0]!)).toBe('perfect');
+    expect(j.tap(expected[0]! + ms(60))).toBe('ignored');
+  });
+
+  it('채터링 기준은 채택 여부와 무관하게 직전 입력이다 (바운스 연쇄)', () => {
+    const j = createJudger(expected, 0);
+    expect(j.tap(expected[0]! + ms(300))).toBe('extra');
+    expect(j.tap(expected[0]! + ms(359))).toBe('ignored'); // 직전과 59ms
+    expect(j.tap(expected[0]! + ms(400))).toBe('ignored'); // 무시된 입력과 41ms
+  });
+
+  it('카운트인 구간의 입력은 판정하지 않는다 (PRD §5)', () => {
+    const j = createJudger(expected, 0);
+    expect(j.tap(expected[0]! - ms(500))).toBe('ignored');
+    // 추가 탭으로도 세지 않는다
+    expect(j.result('quarter', 80).extraTaps).toBe(0);
+  });
+
+  it('첫 기대 탭을 살짝 앞서 치는 입력은 정상 판정한다', () => {
+    expect(createJudger(expected, 0).tap(expected[0]! - ms(40))).toBe('perfect');
+    expect(createJudger(expected, 0).tap(expected[0]! - ms(110))).toBe('good');
   });
 
   it('더블 매칭 방지: 같은 기대 탭에 두 입력이 매칭되지 않는다', () => {
@@ -118,6 +145,20 @@ describe('createJudger — miss 확정 (§3.8)', () => {
     expect(j.collectMisses(expected[0]! + ms(121))).toEqual([]); // 재보고 안 함
   });
 
+  it('지연 보정이 miss 마감 시점에도 반영된다', () => {
+    const j = createJudger(expected, 200); // offset +200ms
+    // raw 축의 유효 창은 expected + 200ms를 중심으로 ±120ms → 마감은 +320ms
+    expect(j.collectMisses(expected[0]! + ms(200))).toEqual([]);
+    expect(j.collectMisses(expected[0]! + ms(319))).toEqual([]);
+    expect(j.collectMisses(expected[0]! + ms(321))).toEqual([0]);
+  });
+
+  it('보정 후 제때 들어온 탭은 miss로 확정되지 않는다', () => {
+    const j = createJudger(expected, 200);
+    expect(j.tap(expected[0]! + ms(200))).toBe('perfect'); // 보정하면 오차 0
+    expect(j.collectMisses(expected[0]! + ms(400))).toEqual([]);
+  });
+
   it('매칭된 기대 탭은 miss로 확정되지 않는다', () => {
     const j = createJudger(expected, 0);
     j.tap(expected[0]!);
@@ -144,9 +185,13 @@ describe('createJudger — 정확도 집계 (§3)', () => {
   });
 
   it('결과에 패턴·BPM·재생 시각이 담긴다', () => {
-    const r = createJudger(expectedTapTimes(quarter, 80, 0), 0).result('quarter', 80);
-    expect(r.patternId).toBe('quarter');
-    expect(r.bpm).toBe(80);
-    expect(Date.parse(r.playedAt)).not.toBeNaN();
+    const j = createJudger(expectedTapTimes(quarter, 80, 0), 0);
+    expect(Date.parse(j.result('quarter', 80).playedAt)).not.toBeNaN(); // 기본값
+    const r = j.result('quarter', 80, '2026-09-09T00:00:00.000Z'); // 주입 가능
+    expect(r).toMatchObject({
+      patternId: 'quarter',
+      bpm: 80,
+      playedAt: '2026-09-09T00:00:00.000Z',
+    });
   });
 });

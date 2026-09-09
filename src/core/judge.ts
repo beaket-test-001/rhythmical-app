@@ -1,4 +1,5 @@
-// 판정 엔진 — Tech Spec §3. 순수 로직만 두고 DOM · 오디오에 의존하지 않는다.
+// 판정 엔진 — Tech Spec §3. DOM · 오디오에 의존하지 않고 시각은 전부 인자로
+// 받으므로 판정은 결정적이다.
 //
 // 시간 축 주의: 기대 탭과 입력 탭 모두 AudioContext 축(초)이다.
 // performance.now()(ms) → AudioContext(초) 변환은 호출부(연습 화면)의 책임이다.
@@ -9,13 +10,16 @@ import {
   PERFECT_WINDOW_MS,
   PLAY_BARS,
 } from '../constants';
-import type { Pattern, PatternId, SessionResult } from '../types';
+import type { Pattern, PatternId, SessionResult, Verdict } from '../types';
 
 /** 부동소수점 비교 오차 흡수용. 1e-6ms = 1피코초 수준이라 판정에 영향이 없다. */
 const EPSILON_MS = 1e-6;
 
+/** 매칭에 성공한 탭의 판정. miss는 입력이 아니라 미입력이라 여기 없다. */
+export type MatchedVerdict = Exclude<Verdict, 'miss'>;
+
 /** 한 번의 탭 입력이 어떻게 처리되었는지. 화면 피드백에 그대로 쓴다. */
-export type TapOutcome = 'perfect' | 'good' | 'extra' | 'ignored';
+export type TapOutcome = MatchedVerdict | 'extra' | 'ignored';
 
 /** 기대 탭 하나에 적용되는 허용 오차(ms). */
 export interface TapWindow {
@@ -68,8 +72,11 @@ export interface Judger {
   tap(rawTime: number): TapOutcome;
   /** now 시점까지 miss가 확정된 기대 탭의 인덱스. 한 번 보고한 건 다시 나오지 않는다. */
   collectMisses(now: number): number[];
-  /** 세션 집계. 미매칭 기대 탭은 모두 miss로 계산한다. */
-  result(patternId: PatternId, bpm: number): SessionResult;
+  /**
+   * 세션 집계. 미매칭 기대 탭은 모두 miss로 계산한다.
+   * @param playedAt 생략하면 호출 시각. 테스트에서 고정하기 위한 인자다.
+   */
+  result(patternId: PatternId, bpm: number, playedAt?: string): SessionResult;
 }
 
 /**
@@ -83,13 +90,20 @@ export interface Judger {
 export function createJudger(expected: number[], offsetMs: number): Judger {
   const windows = tapWindows(expected);
   /** 기대 탭별 판정. null이면 아직 미매칭. */
-  const verdicts: (TapOutcome & ('perfect' | 'good') | null)[] = expected.map(
-    () => null,
-  );
+  const verdicts: (MatchedVerdict | null)[] = expected.map(() => null);
   const missReported = expected.map(() => false);
 
-  let lastAcceptedTap = -Infinity;
+  /** 채터링 판정 기준. 무시된 입력도 포함한다 — 바운스는 연쇄로 들어오기 때문. */
+  let lastTap = -Infinity;
   let extraTaps = 0;
+
+  // 첫 기대 탭의 허용 창이 열리기 전 = 아직 카운트인 구간.
+  // PRD §5 "카운트인 중 입력은 판정하지 않는다" — 추가 탭으로도 세지 않는다.
+  // 창 시작을 경계로 잡아, 첫 박을 살짝 앞서 치는 정상 입력은 살린다.
+  const countInEndsAt =
+    expected.length === 0
+      ? Infinity
+      : expected[0]! - windows[0]!.goodMs / 1000;
 
   /** 아직 매칭되지 않은 기대 탭 중 가장 가까운 것의 인덱스. */
   const nearestUnmatched = (time: number): number => {
@@ -108,35 +122,38 @@ export function createJudger(expected: number[], offsetMs: number): Judger {
 
   return {
     tap(rawTime) {
-      // 1. 채터링 방지 — 직전에 받아들인 입력과 너무 붙어 있으면 버린다
-      if ((rawTime - lastAcceptedTap) * 1000 < DEBOUNCE_MS - EPSILON_MS) {
-        return 'ignored';
-      }
-      lastAcceptedTap = rawTime;
+      // 1. 채터링 방지 — 직전 입력과 60ms 이내면 버린다.
+      //    PRD §5는 "이내"(경계 포함)라 Tech Spec §3.1의 "미만"보다 우선한다.
+      const sinceLastMs = (rawTime - lastTap) * 1000;
+      lastTap = rawTime;
+      if (sinceLastMs <= DEBOUNCE_MS + EPSILON_MS) return 'ignored';
 
       // 2. 지연 보정을 적용한 뒤 판정한다
       const adjusted = rawTime - offsetMs / 1000;
 
-      // 3. 가장 가까운 미매칭 기대 탭을 찾는다
+      // 3. 카운트인 구간의 입력은 판정 대상이 아니다
+      if (adjusted < countInEndsAt - EPSILON_MS) return 'ignored';
+
+      // 4. 가장 가까운 미매칭 기대 탭을 찾는다
       const index = nearestUnmatched(adjusted);
       if (index === -1) {
         extraTaps++;
         return 'extra';
       }
 
-      // 4. 해당 기대 탭의 허용 오차 안이면 매칭 확정
+      // 5. 해당 기대 탭의 허용 오차 안이면 매칭 확정
       const distanceMs = Math.abs(adjusted - expected[index]!) * 1000;
-      const window = windows[index]!;
-      if (distanceMs <= window.perfectMs + EPSILON_MS) {
+      const tapWindow = windows[index]!;
+      if (distanceMs <= tapWindow.perfectMs + EPSILON_MS) {
         verdicts[index] = 'perfect';
         return 'perfect';
       }
-      if (distanceMs <= window.goodMs + EPSILON_MS) {
+      if (distanceMs <= tapWindow.goodMs + EPSILON_MS) {
         verdicts[index] = 'good';
         return 'good';
       }
 
-      // 5. 창 밖의 입력은 추가 탭으로 별도 집계 (정확도 분모에 불포함)
+      // 6. 창 밖의 입력은 추가 탭으로 별도 집계 (정확도 분모에 불포함)
       extraTaps++;
       return 'extra';
     },
@@ -145,7 +162,11 @@ export function createJudger(expected: number[], offsetMs: number): Judger {
       const confirmed: number[] = [];
       for (let i = 0; i < expected.length; i++) {
         if (verdicts[i] !== null || missReported[i]) continue;
-        const deadline = expected[i]! + windows[i]!.goodMs / 1000;
+        // 마감은 tap()과 같은 축에서 계산해야 한다. tap()이 raw에서 offset을
+        // 빼고 비교하므로, raw 축의 유효 창은 expected + offset을 중심으로 열린다.
+        // 이 항을 빼먹으면 offset이 클 때 창이 열리기도 전에 miss가 확정되어
+        // 화면 피드백과 최종 집계가 어긋난다.
+        const deadline = expected[i]! + (offsetMs + windows[i]!.goodMs) / 1000;
         if (now > deadline + EPSILON_MS) {
           missReported[i] = true;
           confirmed.push(i);
@@ -154,7 +175,7 @@ export function createJudger(expected: number[], offsetMs: number): Judger {
       return confirmed;
     },
 
-    result(patternId, bpm) {
+    result(patternId, bpm, playedAt = new Date().toISOString()) {
       const perfect = verdicts.filter((v) => v === 'perfect').length;
       const good = verdicts.filter((v) => v === 'good').length;
       const miss = expected.length - perfect - good;
@@ -168,7 +189,7 @@ export function createJudger(expected: number[], offsetMs: number): Judger {
         accuracy: Math.round(raw * 10) / 10, // 소수 1자리
         counts: { perfect, good, miss },
         extraTaps,
-        playedAt: new Date().toISOString(),
+        playedAt,
       };
     },
   };
