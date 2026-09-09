@@ -1,8 +1,8 @@
 // 패턴 5종 정적 데이터 — Tech Spec §9가 단일 출처.
 import type { Pattern } from '../types';
 
-/** 셋잇단 헬퍼 — 부동소수점 하드코딩(0.333…)을 피한다. */
-const T = (k: number, j: number) => k + j / 3;
+/** 셋잇단 j번째 음의 박 위치. 부동소수점 하드코딩(0.333…)을 피한다. */
+const tripletBeat = (beat: number, index: number) => beat + index / 3;
 
 export const PATTERNS: Pattern[] = [
   {
@@ -31,8 +31,12 @@ export const PATTERNS: Pattern[] = [
     timeSignature: [4, 4],
     bpmDefault: 70,
     bpmMin: 60,
-    bpmMax: 100, // 인접 간격 200ms 확보 — 판정 모호성 방지
-    taps: [0, 1, 2, 3].flatMap((k) => [T(k, 0), T(k, 1), T(k, 2)]),
+    // 상한 100BPM에서 인접 간격 200ms. 고정 ±120ms 창은 겹치므로
+    // 판정은 동적 윈도우(Tech Spec §3.6)로 좁혀 모호성을 없앤다.
+    bpmMax: 100,
+    taps: [0, 1, 2, 3].flatMap((beat) =>
+      [0, 1, 2].map((i) => tripletBeat(beat, i)),
+    ),
     accents: [0],
   },
   {
@@ -56,7 +60,3 @@ export const PATTERNS: Pattern[] = [
     accents: [0],
   },
 ];
-
-/** id로 패턴을 찾는다. 없으면 undefined. */
-export const findPattern = (id: string): Pattern | undefined =>
-  PATTERNS.find((p) => p.id === id);

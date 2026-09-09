@@ -14,3 +14,7 @@ export const OFFSET_MAX_MS = 200;
 
 export const LOOKAHEAD_INTERVAL_MS = 25; // 스케줄러 타이머 주기
 export const SCHEDULE_AHEAD_S = 0.1; // 선행 예약 윈도우
+
+// localStorage 키 — Tech Spec §2. 스키마가 바뀌면 v2로 올린다.
+export const RECORDS_KEY = 'rhythmical.records.v1';
+export const SETTINGS_KEY = 'rhythmical.settings.v1';

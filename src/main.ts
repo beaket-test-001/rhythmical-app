@@ -1,4 +1,5 @@
-// 진입점 — 화면 전환은 T8에서 붙인다.
+// 진입점.
+// TODO: 화면 전환(목록 / 연습 / 결과 / 설정)은 T8에서 구현한다. 현재는 셋업 확인용 임시 표시.
 import { PATTERNS } from './core/patterns';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;

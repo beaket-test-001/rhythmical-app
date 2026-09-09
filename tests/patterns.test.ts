@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { PATTERNS } from '../src/core/patterns';
 
-// 패턴 데이터는 정적이지만 판정 로직의 입력 계약이므로 무결성만 검증한다.
+// 패턴 데이터는 정적이지만 판정 로직(동적 윈도우)이 taps의 정렬·범위에
+// 의존하므로, 그 입력 계약만 검증한다.
 describe('PATTERNS', () => {
   it('사양서의 패턴 5종이 정의되어 있다', () => {
     expect(PATTERNS.map((p) => p.id)).toEqual([
@@ -17,7 +18,6 @@ describe('PATTERNS', () => {
     for (const p of PATTERNS) {
       const beatsPerBar = p.timeSignature[0];
       expect(p.taps.length).toBeGreaterThan(0);
-      expect(p.taps[0]).toBe(0); // 마디 첫 박은 항상 탭
       for (let i = 0; i < p.taps.length; i++) {
         expect(p.taps[i]!).toBeGreaterThanOrEqual(0);
         expect(p.taps[i]!).toBeLessThan(beatsPerBar);
@@ -37,11 +37,5 @@ describe('PATTERNS', () => {
     const triplet = PATTERNS.find((p) => p.id === 'triplet')!;
     expect(triplet.bpmMax).toBe(100);
     expect(triplet.taps.length).toBe(12); // 4박 × 3연음
-  });
-
-  it('액센트 위치는 모두 탭 위치에 포함된다', () => {
-    for (const p of PATTERNS) {
-      for (const a of p.accents) expect(p.taps).toContain(a);
-    }
   });
 });

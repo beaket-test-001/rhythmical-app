@@ -1,10 +1,19 @@
 // 앱 전역 데이터 모델 — Tech Spec §2.
 
+/** 구현된 패턴 식별자의 닫힌 집합. 오타를 컴파일 시점에 잡는다. */
+export type PatternId =
+  | 'quarter'
+  | 'eighth'
+  | 'triplet'
+  | 'syncopation'
+  | 'eighth-mix';
+
 /** 리듬 패턴. taps는 한 마디 안의 탭 위치(박 단위 오프셋, 0 = 마디 첫 박). */
 export interface Pattern {
-  id: string;
+  id: PatternId;
   name: string; // 표시명(한국어)
-  timeSignature: [number, number]; // MVP는 [4, 4] 고정
+  // TODO: MVP는 [4, 4] 고정. 다른 박자표는 v0.2+에서 지원(로드맵 DB 등록 대상)
+  timeSignature: [number, number];
   bpmDefault: number;
   bpmMin: number;
   bpmMax: number;
@@ -24,7 +33,7 @@ export interface TapJudgment {
 
 /** 연습 1세션의 집계 결과. */
 export interface SessionResult {
-  patternId: string;
+  patternId: PatternId;
   bpm: number;
   accuracy: number; // 0~100, 소수 1자리
   counts: { perfect: number; good: number; miss: number };
@@ -33,7 +42,7 @@ export interface SessionResult {
 }
 
 export interface StoredRecord {
-  patternId: string;
+  patternId: PatternId;
   bestAccuracy: number;
   updatedAt: string;
 }
