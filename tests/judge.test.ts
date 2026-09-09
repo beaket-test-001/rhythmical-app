@@ -195,3 +195,25 @@ describe('createJudger — 정확도 집계 (§3)', () => {
     });
   });
 });
+
+describe('createJudger — 판정 확정 시각', () => {
+  const expected = expectedTapTimes(quarter, 80, 0);
+
+  it('마지막 기대 탭의 허용 창이 닫히는 시각', () => {
+    const last = expected[expected.length - 1]!;
+    expect(createJudger(expected, 0).settledAt).toBeCloseTo(last + 0.12, 10);
+  });
+
+  it('지연 보정만큼 뒤로 밀린다', () => {
+    const last = expected[expected.length - 1]!;
+    expect(createJudger(expected, 200).settledAt).toBeCloseTo(last + 0.32, 10);
+  });
+
+  it('120BPM eighth-mix + 보정 200ms면 마디 끝보다 늦게 확정된다', () => {
+    const mix = PATTERNS.find((p) => p.id === 'eighth-mix')!;
+    const exp = expectedTapTimes(mix, 120, 0);
+    const barEnd = (COUNT_IN_BARS + PLAY_BARS) * 4 * (60 / 120); // 10초
+    expect(createJudger(exp, 200).settledAt).toBeGreaterThan(barEnd);
+    expect(createJudger(exp, 0).settledAt).toBeLessThan(barEnd);
+  });
+});

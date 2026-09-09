@@ -68,6 +68,15 @@ export function tapWindows(expected: number[]): TapWindow[] {
 }
 
 export interface Judger {
+  /**
+   * 모든 판정이 확정되는 시각. 마지막 기대 탭의 허용 창이 닫히는 때다.
+   *
+   * 마디가 끝나는 시각보다 늦을 수 있다. 예를 들어 120BPM eighth-mix는
+   * 마지막 기대 탭이 마디 끝보다 0.25초 앞서지만, 지연 보정 +200ms를 주면
+   * 창이 마디 끝 뒤에 닫힌다. 화면은 이 시각까지 기다려야 마지막 판정을
+   * 놓치지 않는다 (Tech Spec §3 종료 집계).
+   */
+  readonly settledAt: number;
   /** 탭 입력 1건을 처리하고 화면에 표시할 판정을 돌려준다. */
   tap(rawTime: number): TapOutcome;
   /** now 시점까지 miss가 확정된 기대 탭의 인덱스. 한 번 보고한 건 다시 나오지 않는다. */
@@ -120,7 +129,14 @@ export function createJudger(expected: number[], offsetMs: number): Judger {
     return best;
   };
 
+  const lastIndex = expected.length - 1;
+
   return {
+    settledAt:
+      lastIndex < 0
+        ? 0
+        : expected[lastIndex]! + (offsetMs + windows[lastIndex]!.goodMs) / 1000,
+
     tap(rawTime) {
       // 1. 채터링 방지 — 직전 입력과 60ms 이내면 버린다.
       //    PRD §5는 "이내"(경계 포함)라 Tech Spec §3.1의 "미만"보다 우선한다.
