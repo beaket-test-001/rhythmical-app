@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { startSession } from '../src/ui/practice';
+import { inputTime, startSession } from '../src/ui/practice';
 import { PATTERNS } from '../src/core/patterns';
 import { COUNT_IN_BARS, PLAY_BARS, SCHEDULE_AHEAD_S } from '../src/constants';
 
@@ -181,5 +181,36 @@ describe('startSession — miss 확정', () => {
     expect(result.counts).toEqual({ perfect: 0, good: 0, miss: 16 });
     expect(result.accuracy).toBe(0);
     session.stop();
+  });
+});
+
+describe('inputTime — 입력 시각의 시계 축 방어', () => {
+  // 판정은 performance.now() 축으로 만든 anchor에 의존한다. event.timeStamp가
+  // 다른 축이면 모든 탭이 판정 창 밖으로 나가 정확도가 0%가 되는데, 에러가
+  // 나지 않아 화면상으로는 멀쩡해 보인다. 실기기 검증을 보류한 상태라
+  // 이 실패 모드는 코드에서 막아 둔다.
+  it('디스패치가 늦어도 원래 시각을 쓴다 — timeStamp가 더 정확하다', () => {
+    expect(inputTime(10_000, 10_180)).toBe(10_000);
+  });
+
+  it('메인 스레드가 오래 막혀 밀린 입력도 원래 시각을 지킨다', () => {
+    // 저사양 기기에서 1초 넘게 블로킹되면 큐에 쌓인 입력이 한꺼번에 온다.
+    // 이때 정확한 timeStamp를 버리면 탭들이 now로 뭉쳐 채터링 규칙(60ms)에
+    // 전부 삼켜진다 — 가드가 없느니만 못한 결과가 된다.
+    expect(inputTime(5_000, 6_500)).toBe(5_000);
+    expect(inputTime(1_000, 30_000)).toBe(1_000);
+  });
+
+  it('epoch 기준 timeStamp는 버리고 현재 시각을 쓴다', () => {
+    // 일부 WebKit 버전이 주는 값. 그대로 쓰면 anchor 변환이 통째로 어긋난다
+    const epochLike = 1_757_000_000_000;
+    expect(inputTime(epochLike, 12_345.6)).toBe(12_345.6);
+  });
+
+  it('값이 없는 합성 이벤트는 현재 시각을 쓴다', () => {
+    // 0은 "과거"라 시계 검사만으로는 통과한다. 유효한 입력 시각이 아니므로
+    // 따로 걸러야 한다 — 페이지 로드 직후든 한참 뒤든 마찬가지다.
+    expect(inputTime(0, 12_345.6)).toBe(12_345.6);
+    expect(inputTime(0, 40)).toBe(40);
   });
 });

@@ -53,7 +53,13 @@ export function startSession({
   // 시간 축 기준점. 메트로놈은 AudioContext 축(초), 입력 이벤트는
   // performance.now() 축(ms)이라 축이 다르다. 두 시계를 같은 순간에 읽어
   // anchor를 만들고 모든 탭을 AudioContext 축으로 옮긴다 (Tech Spec §3).
-  const anchor = { audio: ctx.currentTime, perf: performance.now() };
+  // 두 시계를 최대한 붙여 읽는다. 읽는 사이가 벌어지면 그 폭만큼 세션 전체의
+  // 판정 기준이 밀리므로, 앞뒤로 감싸 중간값을 쓴다.
+  const perfBefore = performance.now();
+  const anchor = {
+    audio: ctx.currentTime,
+    perf: (perfBefore + performance.now()) / 2,
+  };
   const toAudioTime = (perfMs: number) =>
     anchor.audio + (perfMs - anchor.perf) / 1000;
 
@@ -96,6 +102,38 @@ export function startSession({
     stop: () => metronome.stop(),
     result: () => judger.result(pattern.id, bpm),
   };
+}
+
+/**
+ * event.timeStamp가 미래로 이만큼 넘어가면 다른 시계로 본다(ms).
+ *
+ * TODO: 실기기 검증 없이 고른 값이다. epoch 축(1e12 차이)과 정상 값 사이에는
+ *       실제 데이터가 없어 이 사이 어떤 값을 잡아도 결과가 같지만, iOS 확인
+ *       후에도 근거가 생기지는 않는다. 남겨 둘지 자체를 그때 재검토한다.
+ */
+const FUTURE_CLOCK_TOLERANCE_MS = 1000;
+
+/**
+ * 입력 이벤트의 시각을 performance.now() 축의 값으로 돌려준다.
+ *
+ * event.timeStamp는 performance.now()와 같은 기준점을 쓰고 하드웨어에 더
+ * 가까워서, 핸들러 진입 지연이 판정에 섞이지 않는다. 그래서 우선한다.
+ *
+ * 다만 구형 WebKit · UIWebView는 이 값을 epoch 기준으로 준다. 그대로 쓰면 세션
+ * anchor와 축이 어긋나 모든 탭이 판정 창 밖으로 나가고, 예외도 없이 정확도만
+ * 0%가 된다 — 화면은 멀쩡해 보여서 알아채기 어렵다.
+ *
+ * 판정은 "미래로 크게 벗어났는가"만 본다. 이벤트는 언제나 과거에 일어났으므로
+ * 정상 값이 now보다 한참 앞설 수 없고, epoch 값은 반드시 여기 걸린다. 양쪽을
+ * 다 보면 반대 상황을 망친다 — 메인 스레드가 오래 막히면 큐에 쌓인 입력이
+ * 정확한 원래 시각을 들고 한꺼번에 오는데, 그걸 버리면 탭이 now로 뭉쳐
+ * 채터링 규칙(60ms)에 전부 삼켜진다.
+ */
+export function inputTime(eventTimeStamp: number, now: number): number {
+  const trustworthy =
+    eventTimeStamp > 0 &&
+    eventTimeStamp - now <= FUTURE_CLOCK_TOLERANCE_MS;
+  return trustworthy ? eventTimeStamp : now;
 }
 
 /** 판정 라벨. 색만으로 구분하지 않도록 텍스트를 병기한다(색약 대응). */
@@ -362,13 +400,7 @@ export function mountPractice(
     if (outcome === 'perfect' || outcome === 'good') showFlash(outcome);
   }
 
-  /**
-   * 입력 시각. event.timeStamp는 performance.now()와 같은 기준점을 쓰고
-   * 하드웨어에 더 가까운 값이라 우선한다. 값이 없는 합성 이벤트만 대체한다.
-   */
-  function stampOf(e: Event) {
-    return e.timeStamp > 0 ? e.timeStamp : performance.now();
-  }
+  const stampOf = (e: Event) => inputTime(e.timeStamp, performance.now());
 
   function exit() {
     // teardown이 stage를 바꾸므로 먼저 읽는다.
