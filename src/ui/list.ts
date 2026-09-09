@@ -1,4 +1,5 @@
-// 패턴 목록 화면 — Tech Spec §6, 디자인 문서.
+// 패턴 목록 화면 — Tech Spec §6, 디자인 문서, v1.0.1 PRD §3.1(피드백 창구).
+import { FEEDBACK_URL } from '../constants';
 import { PATTERNS } from '../core/patterns';
 import { loadRecords } from '../storage';
 import type { Pattern } from '../types';
@@ -38,8 +39,17 @@ export function mountList(
         <button class="topbar__settings" type="button" aria-label="설정 열기">⚙</button>
       </header>
       <ul class="cards">${cards}</ul>
+      <footer class="footer">
+        <a class="footer__link" target="_blank" rel="noopener noreferrer">
+          의견 보내기<span class="visually-hidden"> (새 창에서 열림)</span>
+        </a>
+      </footer>
     </section>
   `;
+
+  // href는 보간하지 않고 속성으로 넣는다. PRD가 "상수만 바꿔 대체"를 권하는
+  // 값이라, 따옴표가 든 주소로 바뀌면 innerHTML 보간은 속성을 탈출한다.
+  root.querySelector<HTMLAnchorElement>('.footer__link')!.href = FEEDBACK_URL;
 
   const onClick = (e: Event) => {
     const button = (e.target as HTMLElement).closest<HTMLElement>('[data-pattern]');

@@ -296,6 +296,25 @@ body {
   background: var(--surface-active);
 }
 
+.footer {
+  /* 카드가 적어 여백이 남을 때도 화면 하단에 붙인다 */
+  margin-top: auto;
+  padding: 0 12px calc(32px + env(safe-area-inset-bottom, 0px));
+  text-align: center;
+}
+
+.footer__link {
+  display: inline-block;
+  /* 밑줄이 없으면 옆의 보조 텍스트와 구분되지 않아 링크로 안 보인다 */
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  /* 터치 타깃 44px 확보 — 링크지만 손가락으로 누른다 */
+  min-height: 44px;
+  padding: 12px 16px;
+  color: var(--text-sub);
+  font-size: 14px;
+}
+
 /* 결과 ------------------------------------------------------------------ */
 .result {
   align-items: center;
