@@ -63,20 +63,41 @@ const chrome = spawn(
  * 프로세스가 완전히 죽기 전에 지우면 ENOTEMPTY로 실패한다. 삭제가 try로
  * 감싸여 있어 조용히 넘어가는 대신 프로필이 계속 쌓인다 — 실제로 23개가
  * 남아 있었다. 종료를 기다린 뒤 지운다.
+ *
+ * 프라미스를 기억해 두고 두 번째 호출은 같은 것을 기다린다. finally에서
+ * 정리하는 도중 Ctrl-C가 들어오면 두 번 불리는데, 그때 "살아 있는지"를
+ * 다시 판정하면 안 된다 — 시그널로 죽은 자식은 exitCode가 계속 null이라
+ * 이미 끝난 종료를 다시 기다리며 상한만큼 매달린다.
  */
-const cleanup = async () => {
-  if (chrome.exitCode === null) {
+let cleaning;
+const cleanup = () =>
+  (cleaning ??= (async () => {
     const exited = new Promise((resolve) => chrome.once('exit', resolve));
-    chrome.kill();
-    // 안 죽는 경우에도 스크립트가 매달리지 않게 상한을 둔다
-    await Promise.race([exited, wait(3000)]);
-  }
-  try {
-    rmSync(profile, { recursive: true, force: true });
-  } catch {
-    // 지우지 못해도 진행
-  }
-};
+    try {
+      chrome.kill();
+    } catch {
+      // 이미 죽었으면 exited가 곧바로 풀린다
+    }
+    // 안 죽으면 강제로 끊는다. 그냥 지우러 가면 ENOTEMPTY로 다시 쌓인다.
+    const killed = await Promise.race([
+      exited.then(() => true),
+      wait(3000).then(() => false),
+    ]);
+    if (!killed) {
+      try {
+        chrome.kill('SIGKILL');
+        await Promise.race([exited, wait(1000)]);
+      } catch {
+        // 여기까지 왔으면 프로필이 남을 수 있다
+      }
+    }
+    try {
+      rmSync(profile, { recursive: true, force: true });
+    } catch {
+      console.warn('임시 프로필을 지우지 못했다:', profile);
+    }
+  })());
+
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.on(signal, () => {
     void cleanup().then(() => process.exit(signal === 'SIGINT' ? 130 : 143));
@@ -248,6 +269,23 @@ try {
     '모달 닫힘 후 DOM에서 제거',
   );
 
+  const feedback = await evaluate(`(() => {
+    const a = document.querySelector('.footer__link');
+    if (!a) return null;
+    const box = a.getBoundingClientRect();
+    return {
+      href: a.href, target: a.target, rel: a.rel,
+      touch: Math.round(box.width) + 'x' + Math.round(box.height),
+    };
+  })()`);
+  check(
+    feedback?.href?.startsWith('https://') &&
+      feedback.target === '_blank' &&
+      feedback.rel.includes('noopener'),
+    '목록에서 의견을 보낼 수 있다',
+    feedback ? `${feedback.href} (${feedback.touch})` : '링크 없음',
+  );
+
   console.log('\n[2] 패턴 5종 완주 (시작 → 카운트인 → 연습 → 결과)');
   for (const [i, p] of PATTERNS.entries()) {
     await openPattern(p.id);
@@ -370,6 +408,11 @@ try {
   await openPattern('quarter');
   const beatsTop = () =>
     evaluate("Math.round(document.querySelector('.beats').getBoundingClientRect().top)");
+  check(
+    !(await evaluate("!!document.querySelector('.footer__link')")),
+    '연습 화면에는 피드백 링크가 노출되지 않는다',
+  );
+
   const beforeStart = await beatsTop();
   await startTapping(120, false);
   await until("document.querySelector('.countdown').textContent !== ''", '카운트인', 8000);

@@ -22,10 +22,13 @@ export const SETTINGS_KEY = 'rhythmical.settings.v1';
 /**
  * 의견 보내기 창구.
  *
- * 계정 없이 보낼 수 있는 창구(구글 폼 등)가 준비되면 이 값만 바꾼다.
  * 지금 GitHub Issues를 쓰는 이유는, 창구의 종류보다 창구가 아예 없는 것이
  * 문제이기 때문이다 — 계측도 에러 리포팅도 없어서 앱이 특정 기기에서
  * 완전히 깨져 있어도 알아낼 경로가 하나도 없다.
+ *
+ * TODO: GitHub 계정이 필요해 연습만 하러 온 사용자에게는 사실상 닫힌
+ *       창구다. 계정 없이 보낼 수 있는 폼이 준비되면 이 값만 바꾼다.
+ *       그때까지는 창구가 있다는 완료 조건을 문자 그대로만 충족한다.
  */
 export const FEEDBACK_URL =
   'https://github.com/beaket-test-001/rhythmical-app/issues/new';
