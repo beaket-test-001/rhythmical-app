@@ -1,0 +1,206 @@
+/* 디자인 문서의 스타일 가이드. 다크 배경 기본 — 야간 연습 가정. */
+:root {
+  --bg: #111318;
+  --surface: #1d2027;
+  --text: #f2f3f5;
+  --text-sub: #9aa0aa;
+  --perfect: #4ade80;
+  --good: #facc15;
+  --miss: #f87171;
+  --accent: #7c6cff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 16px;
+  /* 연습 중 화면이 스크롤되면 탭 위치가 흔들린다 */
+  overscroll-behavior: none;
+}
+
+.screen {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+}
+
+/* 상단 바 --------------------------------------------------------------- */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+}
+
+.topbar__back {
+  /* 터치 타깃 최소 44×44 */
+  min-width: 44px;
+  min-height: 44px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.topbar__title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.bpm {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  color: var(--text-sub);
+  font-size: 14px;
+}
+
+.bpm__slider {
+  width: 90px;
+  accent-color: var(--accent);
+}
+
+.bpm__slider:disabled {
+  opacity: 0.4;
+}
+
+.bpm__value {
+  min-width: 3ch;
+  color: var(--text);
+  text-align: right;
+}
+
+/* 무대 — 연습 중 시선이 머무는 유일한 영역 --------------------------------- */
+.stage {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  position: relative;
+}
+
+.beats {
+  display: flex;
+  gap: 20px;
+}
+
+.beat {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--surface);
+  /* 리플로를 일으키지 않는 속성만 애니메이션한다 */
+  transition: transform 0.1s ease-out, background-color 0.1s ease-out;
+}
+
+.beat--accent {
+  box-shadow: inset 0 0 0 2px var(--text-sub);
+}
+
+.beat--on {
+  background: var(--accent);
+  transform: scale(1.6);
+}
+
+.countdown {
+  margin: 0;
+  font-size: 64px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text-sub);
+}
+
+.flash {
+  margin: 0;
+  min-height: 32px;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  opacity: 0;
+  transition: opacity 0.3s ease-out;
+}
+
+.flash--perfect,
+.flash--good,
+.flash--miss {
+  opacity: 1;
+  transition: none; /* 나타날 때는 즉시, 사라질 때만 페이드 */
+}
+
+.flash--perfect {
+  color: var(--perfect);
+}
+.flash--good {
+  color: var(--good);
+}
+.flash--miss {
+  color: var(--miss);
+}
+
+/* 탭 영역 — 화면 아래 절반 전체 ------------------------------------------- */
+.tap-area {
+  flex: 0 0 50%;
+  border: 0;
+  border-top: 1px solid var(--surface);
+  background: var(--surface);
+  color: var(--text-sub);
+  font-size: 20px;
+  font-weight: 600;
+  cursor: pointer;
+  /* 더블탭 확대와 그로 인한 300ms 지연을 없앤다 */
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tap-area:active {
+  background: #23272f;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .beat,
+  .flash {
+    transition: none;
+  }
+}
+
+/* 연습 중에는 인디케이터만 남기고 나머지를 흐리게 — 디자인 원칙.
+   ← 뒤로가기는 계속 눌러야 하므로 숨기지 않고 낮춰만 둔다. */
+.practice--running .topbar,
+.practice--running .tap-area {
+  opacity: 0.35;
+  transition: opacity 0.2s ease-out;
+}
+
+/* perfect일 때 인디케이터 펄스 */
+.beats--pulse {
+  animation: beat-pulse 0.2s ease-out;
+}
+
+@keyframes beat-pulse {
+  from {
+    transform: scale(1.12);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .beats--pulse {
+    animation: none;
+  }
+}

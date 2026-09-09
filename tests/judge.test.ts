@@ -105,6 +105,13 @@ describe('createJudger — 입력 처리 규칙', () => {
     expect(j.result('quarter', 80).extraTaps).toBe(0);
   });
 
+  it('카운트인 탭이 바로 뒤의 정상 탭을 삼키지 않는다', () => {
+    const j = createJudger(expected, 0);
+    // 카운트인 끝자락(첫 창이 열리기 직전)에 한 번, 곧바로 정상 탭
+    expect(j.tap(expected[0]! - ms(130))).toBe('ignored'); // 카운트인 구간
+    expect(j.tap(expected[0]!)).toBe('perfect'); // 채터링으로 삼켜지면 안 된다
+  });
+
   it('첫 기대 탭을 살짝 앞서 치는 입력은 정상 판정한다', () => {
     expect(createJudger(expected, 0).tap(expected[0]! - ms(40))).toBe('perfect');
     expect(createJudger(expected, 0).tap(expected[0]! - ms(110))).toBe('good');
@@ -193,5 +200,27 @@ describe('createJudger — 정확도 집계 (§3)', () => {
       bpm: 80,
       playedAt: '2026-09-09T00:00:00.000Z',
     });
+  });
+});
+
+describe('createJudger — 판정 확정 시각', () => {
+  const expected = expectedTapTimes(quarter, 80, 0);
+
+  it('마지막 기대 탭의 허용 창이 닫히는 시각', () => {
+    const last = expected[expected.length - 1]!;
+    expect(createJudger(expected, 0).settledAt).toBeCloseTo(last + 0.12, 10);
+  });
+
+  it('지연 보정만큼 뒤로 밀린다', () => {
+    const last = expected[expected.length - 1]!;
+    expect(createJudger(expected, 200).settledAt).toBeCloseTo(last + 0.32, 10);
+  });
+
+  it('120BPM eighth-mix + 보정 200ms면 마디 끝보다 늦게 확정된다', () => {
+    const mix = PATTERNS.find((p) => p.id === 'eighth-mix')!;
+    const exp = expectedTapTimes(mix, 120, 0);
+    const barEnd = (COUNT_IN_BARS + PLAY_BARS) * 4 * (60 / 120); // 10초
+    expect(createJudger(exp, 200).settledAt).toBeGreaterThan(barEnd);
+    expect(createJudger(exp, 0).settledAt).toBeLessThan(barEnd);
   });
 });
