@@ -59,17 +59,6 @@ function showResult(pattern: Pattern, result: SessionResult) {
   // 알리면 목록 화면과 어긋난다(사양 §2 "저장 실패는 기록만 비활성").
   const isNewBest = saveRecord(result.patternId, result.accuracy);
 
-  track('practice_complete', {
-    pattern_id: result.patternId,
-    bpm: result.bpm,
-    accuracy: result.accuracy,
-    perfect: result.counts.perfect,
-    good: result.counts.good,
-    miss: result.counts.miss,
-    extra_taps: result.extraTaps,
-    is_new_best: isNewBest,
-  });
-
   show((root) =>
     mountResult(root, {
       result,
@@ -83,6 +72,17 @@ function showResult(pattern: Pattern, result: SessionResult) {
       onList: showList,
     }),
   );
+
+  track('practice_complete', {
+    pattern_id: result.patternId,
+    bpm: result.bpm,
+    accuracy: result.accuracy,
+    perfect: result.counts.perfect,
+    good: result.counts.good,
+    miss: result.counts.miss,
+    extra_taps: result.extraTaps,
+    is_new_best: isNewBest,
+  });
 }
 
 showList();

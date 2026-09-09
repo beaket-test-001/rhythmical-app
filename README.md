@@ -7,9 +7,24 @@
 ```bash
 npm install
 npm run dev      # 개발 서버 (http://localhost:5173)
-npm test         # 단위 테스트 (Vitest)
+npm test         # style.css 구조 검사 + 단위 테스트 (Vitest)
 npm run build    # 타입 체크 + 프로덕션 빌드 → dist/
 ```
+
+## 스모크 테스트
+
+설치된 Chrome을 CDP로 몰아 목록 → 연습 → 결과 플로우를 실제로 돌린다.
+추가 의존성 없이 동작한다.
+
+```bash
+npm run build
+npx vite preview --port 4319 &
+npm run smoke
+```
+
+QA 문서의 체크리스트 중 **데스크톱 Chrome에서 자동화 가능한 항목**을 덮는다.
+실제 오디오 재생 여부와 iOS Safari · Android Chrome 동작, 터치 입력 지연은
+실기기 확인이 필요하다.
 
 ## 기술 스택
 

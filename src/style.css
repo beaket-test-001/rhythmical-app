@@ -400,21 +400,22 @@ h1:focus {
 
 .settings__field {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: auto 1fr auto;
   gap: 8px;
   align-items: center;
 }
 
 .settings__label {
+  grid-column: 1;
   font-size: 16px;
 }
 
 .settings__slider {
-  grid-column: 1 / -1;
   accent-color: var(--accent);
 }
 
 .settings__value {
+  grid-column: 3;
   color: var(--text-sub);
   text-align: right;
 }
@@ -424,4 +425,10 @@ h1:focus {
   color: var(--text-sub);
   font-size: 14px;
   line-height: 1.5;
+}
+
+.settings__bound {
+  color: var(--text-sub);
+  font-size: 12px;
+  white-space: nowrap;
 }

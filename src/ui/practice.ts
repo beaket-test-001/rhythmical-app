@@ -245,10 +245,19 @@ export function mountPractice(
 
   const onKeyDown = (e: KeyboardEvent) => {
     if (e.code !== 'Space' || e.repeat) return;
-    // 다른 컨트롤에 포커스가 있으면 브라우저에 맡긴다. 뒤로가기 버튼은
-    // 재생 중에도 항상 활성이어야 하는데, 여기서 삼키면 스페이스로 못 누른다.
+    // 스페이스를 스스로 처리하는 컨트롤에 포커스가 있으면 브라우저에 맡긴다.
+    // 뒤로가기 버튼은 재생 중에도 항상 활성이어야 하는데, 여기서 삼키면
+    // 스페이스로 누를 수 없다.
+    //
+    // 단순히 "body가 아니면 양보"로 잡으면 안 된다. 화면 전환 시 스크린리더를
+    // 위해 제목(tabindex="-1")으로 포커스를 옮기는데, 제목은 스페이스를
+    // 처리하지 않으므로 그 상태에서 탭 입력이 통째로 죽는다.
     const focused = document.activeElement;
-    if (focused && focused !== document.body && focused !== tapArea) return;
+    const yieldsToBrowser =
+      focused instanceof HTMLElement &&
+      focused !== tapArea &&
+      focused.matches('button, input, select, textarea, a[href], [contenteditable]');
+    if (yieldsToBrowser) return;
 
     e.preventDefault(); // 스페이스로 인한 스크롤 방지
     handleTap(stampOf(e));
@@ -354,8 +363,10 @@ export function mountPractice(
   }
 
   function exit() {
-    // teardown이 stage를 바꾸므로 먼저 읽는다
-    const wasPlaying = stage === 'running' || stage === 'starting';
+    // teardown이 stage를 바꾸므로 먼저 읽는다.
+    // 'starting'은 제외한다 — practice_start를 아직 보내지 않았고 startedAtMs도
+    // 비어 있어, 이탈로 세면 elapsed_sec가 페이지 로드 후 경과 시간이 된다.
+    const wasPlaying = stage === 'running';
     teardown();
     if (wasPlaying) {
       track('practice_abort', {

@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test": "node scripts/check-css.mjs && vitest run"
+    "test": "node scripts/check-css.mjs && vitest run",
+    "smoke": "node scripts/smoke.mjs"
   },
   "devDependencies": {
     "typescript": "^5.9.2",
