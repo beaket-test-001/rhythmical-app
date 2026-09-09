@@ -10,6 +10,7 @@
 //   - 백그라운드 전환 시 중지 처리
 //   - 패턴별 최고 기록 저장과 새로고침 후 유지
 //   - 화면 회전 시 크래시 없음
+//   - 단계 전환 시 비트 인디케이터 위치 유지
 //
 // 덮지 못하는 항목(실기기 필요):
 //   - 실제 오디오 재생 여부(헤드리스에는 출력 장치가 없다)
@@ -239,7 +240,28 @@ try {
     await until("!!document.querySelector('.list')", '목록 복귀');
   }
 
-  console.log('\n[3] 기록 저장');
+  console.log('\n[3] 레이아웃 안정성');
+  // 카운트다운이 뜨고 사라질 때 비트 인디케이터가 움직이면, 연습 중 시선이
+  // 한 곳에 머물러야 한다는 디자인 원칙이 깨진다.
+  await openPattern('quarter');
+  const beatsTop = () =>
+    evaluate("Math.round(document.querySelector('.beats').getBoundingClientRect().top)");
+  const beforeStart = await beatsTop();
+  await startTapping(120, false);
+  await until("document.querySelector('.countdown').textContent !== ''", '카운트인', 8000);
+  const duringCountIn = await beatsTop();
+  await until("document.querySelector('.countdown').textContent === ''", '연습 구간', 12000);
+  const duringPlay = await beatsTop();
+  await stopTapping();
+  check(
+    beforeStart === duringCountIn && duringCountIn === duringPlay,
+    '단계가 바뀌어도 비트 인디케이터가 움직이지 않는다',
+    `시작 전 ${beforeStart} / 카운트인 ${duringCountIn} / 연습 ${duringPlay}`,
+  );
+  await evaluate("document.querySelector('.topbar__back').click()");
+  await until("!!document.querySelector('.list')", '목록 복귀');
+
+  console.log('\n[4] 기록 저장');
   const stored = JSON.parse(
     (await evaluate("localStorage.getItem('rhythmical.records.v1')")) ?? '[]',
   );
@@ -251,7 +273,7 @@ try {
   );
   check(shown === 5, '새로고침 후에도 최고 기록 유지', `${shown}종 표시`);
 
-  console.log('\n[4] 중지 경로 (결과 미저장)');
+  console.log('\n[5] 중지 경로 (결과 미저장)');
   await evaluate("localStorage.removeItem('rhythmical.records.v1')");
   await send('Page.reload');
   await until("!!document.querySelector('.list')", '목록');
@@ -270,7 +292,7 @@ try {
     '카운트인 중 중지 시 기록 미저장',
   );
 
-  console.log('\n[5] 백그라운드 전환과 화면 회전');
+  console.log('\n[6] 백그라운드 전환과 화면 회전');
   await openPattern('quarter');
   await startTapping(120, false);
   await until("!!document.querySelector('.beat--on')", '재생 시작', 10000);

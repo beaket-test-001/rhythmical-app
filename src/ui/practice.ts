@@ -168,10 +168,15 @@ export function mountPractice(
       </header>
       <div class="stage">
         <div class="beats" aria-hidden="true">${dots}</div>
-        <p class="countdown" aria-hidden="true"></p>
-        <!-- 초당 여러 번 바뀌는 시각 피드백이라 스크린리더에는 읽히지 않는다.
-             판정 요약은 결과 화면이 담당한다. -->
-        <p class="flash" aria-hidden="true"></p>
+        <!-- 카운트다운과 판정 플래시는 같은 칸에 겹쳐 둔다. 카운트인 중에는
+             판정이 없어 둘이 동시에 뜨지 않고, 높이가 고정되어야 단계가
+             바뀔 때 비트 인디케이터가 움직이지 않는다. -->
+        <div class="feedback">
+          <p class="countdown" aria-hidden="true"></p>
+          <!-- 초당 여러 번 바뀌는 시각 피드백이라 스크린리더에는 읽히지 않는다.
+               판정 요약은 결과 화면이 담당한다. -->
+          <p class="flash" aria-hidden="true"></p>
+        </div>
       </div>
       <button class="tap-area" type="button" aria-label="탭">
         <span class="tap-area__hint">▶ 시작</span>

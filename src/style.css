@@ -35,7 +35,8 @@ body {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 8px 12px;
+  /* 노치 · 상태바 아래로 내려간다 */
+  padding: calc(8px + env(safe-area-inset-top)) 12px 8px;
 }
 
 .topbar__back {
@@ -114,6 +115,18 @@ body {
   transform: scale(1.6);
 }
 
+.feedback {
+  display: grid;
+  place-items: center;
+  /* 카운트다운(64px)이 들어갈 자리를 늘 비워 둔다 — 단계가 바뀌어도
+     비트 인디케이터가 움직이지 않게 하기 위해서다. */
+  min-height: 72px;
+}
+
+.feedback > * {
+  grid-area: 1 / 1;
+}
+
 .countdown {
   margin: 0;
   font-size: 64px;
@@ -124,7 +137,6 @@ body {
 
 .flash {
   margin: 0;
-  min-height: 32px;
   font-size: 28px;
   font-weight: 700;
   letter-spacing: 0.05em;
@@ -164,6 +176,10 @@ body {
   -webkit-user-select: none;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
+  /* 길게 눌렀을 때 뜨는 iOS 컨텍스트 메뉴를 막는다 */
+  -webkit-touch-callout: none;
+  /* 홈 인디케이터에 가리지 않도록 */
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 .tap-area:active {
@@ -431,4 +447,16 @@ h1:focus {
   color: var(--text-sub);
   font-size: 12px;
   white-space: nowrap;
+}
+
+/* 키보드 포커스 표시 — 다크 배경에서 기본 아웃라인은 잘 보이지 않는다.
+   마우스 · 터치에는 뜨지 않도록 :focus-visible만 쓴다. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* 포커스 이동용 제목은 프로그램이 옮긴 것이라 테두리를 띄우지 않는다 */
+h1:focus-visible {
+  outline: none;
 }
