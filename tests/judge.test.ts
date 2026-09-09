@@ -105,6 +105,13 @@ describe('createJudger — 입력 처리 규칙', () => {
     expect(j.result('quarter', 80).extraTaps).toBe(0);
   });
 
+  it('카운트인 탭이 바로 뒤의 정상 탭을 삼키지 않는다', () => {
+    const j = createJudger(expected, 0);
+    // 카운트인 끝자락(첫 창이 열리기 직전)에 한 번, 곧바로 정상 탭
+    expect(j.tap(expected[0]! - ms(130))).toBe('ignored'); // 카운트인 구간
+    expect(j.tap(expected[0]!)).toBe('perfect'); // 채터링으로 삼켜지면 안 된다
+  });
+
   it('첫 기대 탭을 살짝 앞서 치는 입력은 정상 판정한다', () => {
     expect(createJudger(expected, 0).tap(expected[0]! - ms(40))).toBe('perfect');
     expect(createJudger(expected, 0).tap(expected[0]! - ms(110))).toBe('good');

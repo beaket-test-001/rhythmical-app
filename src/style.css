@@ -101,7 +101,7 @@ body {
   height: 16px;
   border-radius: 50%;
   background: var(--surface);
-  /* 리플로를 피하려고 transform과 opacity만 쓴다 */
+  /* 리플로를 일으키지 않는 속성만 애니메이션한다 */
   transition: transform 0.1s ease-out, background-color 0.1s ease-out;
 }
 
@@ -174,5 +174,33 @@ body {
   .beat,
   .flash {
     transition: none;
+  }
+}
+
+/* 연습 중에는 인디케이터만 남기고 나머지를 흐리게 — 디자인 원칙.
+   ← 뒤로가기는 계속 눌러야 하므로 숨기지 않고 낮춰만 둔다. */
+.practice--running .topbar,
+.practice--running .tap-area {
+  opacity: 0.35;
+  transition: opacity 0.2s ease-out;
+}
+
+/* perfect일 때 인디케이터 펄스 */
+.beats--pulse {
+  animation: beat-pulse 0.2s ease-out;
+}
+
+@keyframes beat-pulse {
+  from {
+    transform: scale(1.12);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .beats--pulse {
+    animation: none;
   }
 }

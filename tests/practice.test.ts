@@ -1,7 +1,10 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { startSession } from '../src/ui/practice';
 import { PATTERNS } from '../src/core/patterns';
-import { COUNT_IN_BARS, PLAY_BARS } from '../src/constants';
+import { COUNT_IN_BARS, PLAY_BARS, SCHEDULE_AHEAD_S } from '../src/constants';
+
+/** 메트로놈이 첫 박에 두는 여유 — startMetronome과 같은 규칙. */
+const START_LEAD = SCHEDULE_AHEAD_S / 2;
 
 const quarter = PATTERNS.find((p) => p.id === 'quarter')!;
 
@@ -48,7 +51,7 @@ describe('startSession — 진행 단계', () => {
 
   it('카운트인 동안 4 → 1로 세어 내려간다', () => {
     const { session, seek } = setup();
-    const start = 0.05; // SCHEDULE_AHEAD_S / 2
+    const start = START_LEAD;
 
     seek(start);
     expect(session.poll(start)).toMatchObject({ phase: 'countIn', countdown: 4 });
@@ -61,7 +64,7 @@ describe('startSession — 진행 단계', () => {
 
   it('카운트인 1마디가 지나면 연습 구간으로 넘어간다', () => {
     const { session, seek } = setup();
-    const playStart = 0.05 + COUNT_IN_BARS * 4;
+    const playStart = START_LEAD + COUNT_IN_BARS * 4;
 
     seek(playStart - 0.01);
     expect(session.poll(playStart - 0.01).phase).toBe('countIn');
@@ -72,7 +75,7 @@ describe('startSession — 진행 단계', () => {
 
   it('마지막 마디가 끝나면 종료로 넘어간다', () => {
     const { session, seek } = setup();
-    const end = 0.05 + (COUNT_IN_BARS + PLAY_BARS) * 4; // 20박 × 1초
+    const end = START_LEAD + (COUNT_IN_BARS + PLAY_BARS) * 4; // 20박 × 1초
 
     seek(end - 0.01);
     expect(session.poll(end - 0.01).phase).toBe('playing');
@@ -86,7 +89,7 @@ describe('startSession — 진행 단계', () => {
     const { ctx, seek } = stubContext();
     const mix = PATTERNS.find((p) => p.id === 'eighth-mix')!;
     const session = startSession({ ctx, pattern: mix, bpm: 120, offsetMs: 200 });
-    const barEnd = 0.05 + (COUNT_IN_BARS + PLAY_BARS) * 4 * 0.5; // 10.05초
+    const barEnd = START_LEAD + (COUNT_IN_BARS + PLAY_BARS) * 4 * 0.5; // 10.05초
 
     seek(barEnd);
     expect(session.poll(barEnd).phase).not.toBe('finished');
@@ -97,10 +100,10 @@ describe('startSession — 진행 단계', () => {
 
   it('현재 박을 마디 안 위치로 알려준다', () => {
     const { session, seek } = setup();
-    seek(0.05);
-    expect(session.poll(0.05).beat).toMatchObject({ index: 0, isAccent: true });
-    seek(0.05 + 5);
-    expect(session.poll(0.05 + 5).beat).toMatchObject({ index: 5, isAccent: false });
+    seek(START_LEAD);
+    expect(session.poll(START_LEAD).beat).toMatchObject({ index: 0, isAccent: true });
+    seek(START_LEAD + 5);
+    expect(session.poll(START_LEAD + 5).beat).toMatchObject({ index: 5, isAccent: false });
     session.stop();
   });
 });
@@ -113,7 +116,7 @@ describe('startSession — 탭 입력과 시간 축 변환', () => {
     const session = startSession({ ctx, pattern: quarter, bpm: 60, offsetMs: 0 });
 
     // 첫 기대 탭 = 카운트인 4박 뒤 = 0.05 + 4 = 4.05초 (AudioContext 축)
-    const firstExpected = 0.05 + COUNT_IN_BARS * 4;
+    const firstExpected = START_LEAD + COUNT_IN_BARS * 4;
     seek(firstExpected);
 
     expect(session.tap(toPerf(firstExpected, anchorPerf))).toBe('perfect');
@@ -139,7 +142,7 @@ describe('startSession — 탭 입력과 시간 축 변환', () => {
     const session = startSession({ ctx, pattern: quarter, bpm: 60, offsetMs: 100 });
 
     // 100ms 늦게 친 탭이 보정으로 정확해진다
-    const firstExpected = 0.05 + COUNT_IN_BARS * 4;
+    const firstExpected = START_LEAD + COUNT_IN_BARS * 4;
     expect(session.tap(toPerf(firstExpected + 0.1, anchorPerf))).toBe('perfect');
     session.stop();
   });
@@ -150,7 +153,7 @@ describe('startSession — miss 확정', () => {
     vi.useFakeTimers();
     const { ctx, seek } = stubContext();
     const session = startSession({ ctx, pattern: quarter, bpm: 60, offsetMs: 0 });
-    const firstExpected = 0.05 + COUNT_IN_BARS * 4;
+    const firstExpected = START_LEAD + COUNT_IN_BARS * 4;
 
     seek(firstExpected + 0.1);
     expect(session.poll(firstExpected + 0.1).newMisses).toBe(0); // 아직 창 안
@@ -164,7 +167,7 @@ describe('startSession — miss 확정', () => {
     vi.useFakeTimers();
     const { ctx, seek } = stubContext();
     const session = startSession({ ctx, pattern: quarter, bpm: 60, offsetMs: 0 });
-    const end = 0.05 + (COUNT_IN_BARS + PLAY_BARS) * 4;
+    const end = START_LEAD + (COUNT_IN_BARS + PLAY_BARS) * 4;
 
     seek(end);
     session.poll(end);

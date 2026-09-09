@@ -4,6 +4,7 @@
 // mountPractice는 그 위에 붙는 렌더링이다. 타이밍 판단을 DOM에서 떼어 놓아야
 // 브라우저 없이 검증할 수 있다.
 import { startMetronome, type Beat } from '../audio/metronome';
+import { COUNT_IN_BARS } from '../constants';
 import { createJudger, expectedTapTimes, type TapOutcome } from '../core/judge';
 import type { Pattern, SessionResult } from '../types';
 
@@ -63,7 +64,8 @@ export function startSession({
 
   const beatsPerBar = pattern.timeSignature[0];
   const secondsPerBeat = 60 / bpm;
-  const countInEndsAt = metronome.startTime + beatsPerBar * secondsPerBeat;
+  const countInBeats = COUNT_IN_BARS * beatsPerBar;
+  const countInEndsAt = metronome.startTime + countInBeats * secondsPerBeat;
 
   // 마디가 끝나도 마지막 판정 창이 아직 안 닫혔을 수 있다. 늦은 쪽까지 기다린다.
   const finishesAt = Math.max(metronome.endTime, judger.settledAt);
@@ -81,7 +83,7 @@ export function startSession({
       const beat = metronome.beatAt(now);
       if (now < countInEndsAt) {
         const elapsed = Math.max(0, now - metronome.startTime);
-        const countdown = beatsPerBar - Math.floor(elapsed / secondsPerBeat);
+        const countdown = countInBeats - Math.floor(elapsed / secondsPerBeat);
         return { phase: 'countIn', beat, countdown, newMisses };
       }
       return { phase: 'playing', beat, countdown: null, newMisses };
@@ -119,6 +121,20 @@ export interface PracticeScreenOptions {
  * 중지 · 완료 · 화면 전환 어느 경로로 나가든 정리 함수가 불려야 한다.
  * 타이머 · rAF · 이벤트 리스너 · AudioContext가 전부 여기서 정리된다.
  */
+/**
+ * 화면의 진행 단계.
+ *
+ * bool 여러 개로 나누면 "시작 중인데 이미 죽은" 같은 불가능한 조합이 생긴다.
+ * 입력 · 종료 · 정리가 모두 이 값 하나를 본다.
+ */
+type Stage = 'idle' | 'starting' | 'running' | 'ending' | 'dead';
+
+/**
+ * 연습 화면을 붙이고, 화면을 걷어내는 정리 함수를 돌려준다.
+ *
+ * 중지 · 완료 · 백그라운드 전환 어느 경로로 나가든 정리 함수가 불려야 한다.
+ * 타이머 · rAF · 이벤트 리스너 · AudioContext가 전부 여기서 정리된다.
+ */
 export function mountPractice(
   root: HTMLElement,
   opts: PracticeScreenOptions,
@@ -135,7 +151,7 @@ export function mountPractice(
     <section class="screen practice">
       <header class="topbar">
         <button class="topbar__back" type="button" aria-label="중지하고 목록으로">←</button>
-        <h1 class="topbar__title">${pattern.name}</h1>
+        <h1 class="topbar__title"></h1>
         <label class="bpm">
           <span class="bpm__label">BPM</span>
           <input class="bpm__slider" type="range" min="${pattern.bpmMin}"
@@ -147,34 +163,60 @@ export function mountPractice(
       <div class="stage">
         <div class="beats" aria-hidden="true">${dots}</div>
         <p class="countdown" aria-hidden="true"></p>
-        <p class="flash" role="status" aria-live="polite"></p>
+        <!-- 초당 여러 번 바뀌는 시각 피드백이라 스크린리더에는 읽히지 않는다.
+             판정 요약은 결과 화면이 담당한다. -->
+        <p class="flash" aria-hidden="true"></p>
       </div>
-      <button class="tap-area" type="button">
+      <button class="tap-area" type="button" aria-label="탭">
         <span class="tap-area__hint">▶ 시작</span>
       </button>
     </section>
   `;
 
   const pick = <T extends Element>(sel: string) => root.querySelector<T>(sel)!;
+  pick<HTMLElement>('.topbar__title').textContent = pattern.name;
+
+  const screen = pick<HTMLElement>('.practice');
   const backButton = pick<HTMLButtonElement>('.topbar__back');
   const slider = pick<HTMLInputElement>('.bpm__slider');
   const bpmValue = pick<HTMLOutputElement>('.bpm__value');
+  const beatsEl = pick<HTMLElement>('.beats');
   const beatDots = [...root.querySelectorAll<HTMLElement>('.beat')];
   const countdownEl = pick<HTMLElement>('.countdown');
   const flashEl = pick<HTMLElement>('.flash');
   const tapArea = pick<HTMLButtonElement>('.tap-area');
   const tapHint = pick<HTMLElement>('.tap-area__hint');
 
+  let stage: Stage = 'idle';
   let ctx: AudioContext | null = null;
   let session: PracticeSession | null = null;
   let frame = 0;
   let flashTimer = 0;
+  let endTimer = 0;
   let shownBeat = -1;
+  let lastFlashAt = -Infinity;
 
+  /**
+   * 판정 플래시.
+   *
+   * miss는 양보한다(yielding). 앞 음의 miss 마감과 방금 친 탭의 판정이 한
+   * 프레임에 겹치는 건 정상 시나리오인데, 그때 miss가 덮으면 사용자는 잘 친
+   * 탭이 빨간 MISS로 보이는 것만 본다. 방금 한 행동의 결과가 더 필요한 정보다.
+   */
   const showFlash = (kind: FlashKind) => {
+    const now = performance.now();
+    if (kind === 'miss' && now - lastFlashAt < FLASH_MS) return;
+    lastFlashAt = now;
+
     flashEl.textContent = FLASH_LABEL[kind];
     flashEl.className = `flash flash--${kind}`;
-    // 다음 판정이 오면 타이머를 다시 잡아 이전 플래시가 먼저 지우지 않게 한다
+    if (kind === 'perfect') {
+      // 디자인의 "초록 플래시 + 인디케이터 펄스". 클래스를 다시 붙여 재생시킨다
+      beatsEl.classList.remove('beats--pulse');
+      void beatsEl.offsetWidth;
+      beatsEl.classList.add('beats--pulse');
+    }
+
     clearTimeout(flashTimer);
     flashTimer = window.setTimeout(() => {
       flashEl.className = 'flash';
@@ -193,77 +235,122 @@ export function mountPractice(
     if (snap.newMisses > 0) showFlash('miss');
   };
 
-  /** 화면과 오디오를 모두 멈춘다. 여러 번 불러도 안전하다. */
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (e.code !== 'Space' || e.repeat) return;
+    // 다른 컨트롤에 포커스가 있으면 브라우저에 맡긴다. 뒤로가기 버튼은
+    // 재생 중에도 항상 활성이어야 하는데, 여기서 삼키면 스페이스로 못 누른다.
+    const focused = document.activeElement;
+    if (focused && focused !== document.body && focused !== tapArea) return;
+
+    e.preventDefault(); // 스페이스로 인한 스크롤 방지
+    handleTap(stampOf(e));
+  };
+
+  // 백그라운드로 가면 타이머가 스로틀되어 판정을 신뢰할 수 없다.
+  // 사양 §4에 따라 카운트인 · 재생 중일 때만 중지와 동일하게 처리한다.
+  const onVisibilityChange = () => {
+    if (document.hidden && (stage === 'running' || stage === 'starting')) exit();
+  };
+
+  /**
+   * 화면과 오디오를 모두 멈춘다. 여러 번 불러도 안전하다.
+   *
+   * document 리스너까지 여기서 회수한다. 호출자가 정리 함수를 부르기 전까지
+   * 리스너가 살아 있으면, 이미 멈춘 화면에서 스페이스바가 새 세션을 시작한다.
+   */
   const teardown = () => {
+    stage = 'dead';
     cancelAnimationFrame(frame);
     clearTimeout(flashTimer);
+    clearTimeout(endTimer);
     session?.stop();
     session = null;
-    void ctx?.close();
+    ctx?.close().catch(() => void 0); // 이미 닫혔으면 무시
     ctx = null;
+    document.removeEventListener('keydown', onKeyDown);
+    document.removeEventListener('visibilitychange', onVisibilityChange);
   };
 
   const loop = () => {
-    if (!session || !ctx) return;
+    if (stage !== 'running' || !session || !ctx) return;
     const snap = session.poll(ctx.currentTime);
     render(snap);
 
     if (snap.phase === 'finished') {
       const result = session.result();
-      teardown();
-      onFinish(result);
+      stage = 'ending';
+      session.stop(); // 오디오는 즉시 멈춘다
+      session = null;
+
+      // 마지막 판정 플래시가 보일 시간을 준다. 바로 전환하면 종료 프레임에
+      // 그려진 플래시가 0프레임 만에 사라진다(디자인의 100ms 피드백 요건).
+      endTimer = window.setTimeout(() => {
+        teardown();
+        onFinish(result);
+      }, FLASH_MS);
       return;
     }
     frame = requestAnimationFrame(loop);
   };
 
   const start = async () => {
-    if (session) return;
-    // AudioContext 생성과 resume은 사용자 제스처 안에서만 (iOS 자동재생 정책)
-    ctx = new AudioContext();
-    if (ctx.state === 'suspended') await ctx.resume();
+    // session만으로는 막지 못한다. resume()을 기다리는 동안 두 번째 입력이
+    // 들어오면 AudioContext가 두 개 생기고, 첫 번째는 참조를 잃어 타이머와
+    // 함께 영원히 남는다. 멀티터치와 pointerdown + Space 조합에서 실제로 겹친다.
+    if (stage !== 'idle') return;
+    stage = 'starting';
 
+    // AudioContext 생성과 resume은 사용자 제스처 안에서만 (iOS 자동재생 정책)
+    const audio = new AudioContext();
+    try {
+      if (audio.state === 'suspended') await audio.resume();
+    } catch {
+      // 재생을 시작하지 못하면 아래에서 컨텍스트를 되돌린다
+    }
+
+    // 기다리는 사이에 화면을 떠났다면 방금 만든 컨텍스트를 되돌린다
+    if (stage !== 'starting') {
+      audio.close().catch(() => void 0);
+      return;
+    }
+
+    ctx = audio;
     session = startSession({ ctx, pattern, bpm, offsetMs });
+    stage = 'running';
+
     slider.disabled = true; // 재생 중에는 BPM만 잠근다. ← 뒤로가기는 계속 열려 있다
     tapHint.textContent = '';
+    // 연습 중 시선은 인디케이터 한 곳에만 — 나머지 UI는 흐리게(디자인 원칙)
+    screen.classList.add('practice--running');
     frame = requestAnimationFrame(loop);
   };
 
-  const handleTap = (perfMs: number) => {
-    if (!session) {
+  function handleTap(perfMs: number) {
+    if (stage === 'idle') {
       void start();
       return;
     }
+    if (stage !== 'running' || !session) return;
     const outcome = session.tap(perfMs);
     if (outcome === 'perfect' || outcome === 'good') showFlash(outcome);
-  };
+  }
 
   /**
    * 입력 시각. event.timeStamp는 performance.now()와 같은 기준점을 쓰고
    * 하드웨어에 더 가까운 값이라 우선한다. 값이 없는 합성 이벤트만 대체한다.
    */
-  const stampOf = (e: Event) => (e.timeStamp > 0 ? e.timeStamp : performance.now());
+  function stampOf(e: Event) {
+    return e.timeStamp > 0 ? e.timeStamp : performance.now();
+  }
+
+  function exit() {
+    teardown();
+    onExit();
+  }
 
   const onPointerDown = (e: PointerEvent) => {
     e.preventDefault(); // 더블탭 확대와 뒤따르는 click 이벤트를 막는다
     handleTap(stampOf(e));
-  };
-
-  const onKeyDown = (e: KeyboardEvent) => {
-    if (e.code !== 'Space' || e.repeat) return;
-    e.preventDefault(); // 스페이스로 인한 스크롤과 버튼 클릭을 막는다
-    handleTap(stampOf(e));
-  };
-
-  const exit = () => {
-    teardown();
-    onExit();
-  };
-
-  // 백그라운드로 가면 타이머가 스로틀되어 판정을 신뢰할 수 없다.
-  // 사양 §4에 따라 중지와 동일하게 처리한다(결과 미저장).
-  const onVisibilityChange = () => {
-    if (document.hidden) exit();
   };
 
   tapArea.addEventListener('pointerdown', onPointerDown);
@@ -277,8 +364,6 @@ export function mountPractice(
 
   return () => {
     teardown();
-    document.removeEventListener('keydown', onKeyDown);
-    document.removeEventListener('visibilitychange', onVisibilityChange);
     root.innerHTML = '';
   };
 }

@@ -138,17 +138,19 @@ export function createJudger(expected: number[], offsetMs: number): Judger {
         : expected[lastIndex]! + (offsetMs + windows[lastIndex]!.goodMs) / 1000,
 
     tap(rawTime) {
-      // 1. 채터링 방지 — 직전 입력과 60ms 이내면 버린다.
+      // 1. 지연 보정을 적용한 뒤 판정한다
+      const adjusted = rawTime - offsetMs / 1000;
+
+      // 2. 카운트인 구간의 입력은 판정 대상이 아니다.
+      //    채터링 상태보다 먼저 보는 이유: 판정하지 않는 입력이 다음 정상 탭을
+      //    삼키면 안 된다. 카운트인 끝에 찍힌 탭 때문에 첫 기대 탭이 miss가 된다.
+      if (adjusted < countInEndsAt - EPSILON_MS) return 'ignored';
+
+      // 3. 채터링 방지 — 직전 입력과 60ms 이내면 버린다.
       //    PRD §5는 "이내"(경계 포함)라 Tech Spec §3.1의 "미만"보다 우선한다.
       const sinceLastMs = (rawTime - lastTap) * 1000;
       lastTap = rawTime;
       if (sinceLastMs <= DEBOUNCE_MS + EPSILON_MS) return 'ignored';
-
-      // 2. 지연 보정을 적용한 뒤 판정한다
-      const adjusted = rawTime - offsetMs / 1000;
-
-      // 3. 카운트인 구간의 입력은 판정 대상이 아니다
-      if (adjusted < countInEndsAt - EPSILON_MS) return 'ignored';
 
       // 4. 가장 가까운 미매칭 기대 탭을 찾는다
       const index = nearestUnmatched(adjusted);
